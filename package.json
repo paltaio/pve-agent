@@ -1,0 +1,28 @@
+{
+	"name": "pve-agent",
+	"version": "0.1.0",
+	"description": "TypeScript library for driving a Proxmox VE cluster from Bun",
+	"license": "Apache-2.0",
+	"repository": "github:paltaio/pve-agent",
+	"files": [
+		"src",
+		"schema"
+	],
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"test": "bun test",
+		"format": "oxfmt .",
+		"format:check": "oxfmt --check .",
+		"schema": "bun run scripts/dump-schema.ts",
+		"generate": "bun run scripts/generate-api.ts"
+	},
+	"devDependencies": {
+		"@types/bun": "1.4.2",
+		"oxfmt": "0.67.0",
+		"typescript": "7.0.2"
+	}
+}
