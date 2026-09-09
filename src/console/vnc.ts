@@ -50,11 +50,18 @@ import {
 import { openWebSocket, type ConsoleSocket, type SocketFactory } from './socket.ts'
 
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000
-const DEFAULT_MAX_MESSAGE_BYTES = 64 * 1024 * 1024
 const DEFAULT_CPS = 20
 /** Largest screen a framebuffer is allocated for, at 4 bytes per pixel. */
 const MAX_SCREEN_PIXELS = 7680 * 4320
+/** A Raw rectangle covering the largest screen, plus its 12-byte header. */
+const DEFAULT_MAX_MESSAGE_BYTES = MAX_SCREEN_PIXELS * 4 + 12
 const ENCODINGS = [RFB_ENCODING_COPYRECT, RFB_ENCODING_RAW, RFB_ENCODING_DESKTOP_SIZE]
+/** Control characters `type` sends as a key. */
+const TYPED_CONTROL_KEYS: Readonly<Record<string, string>> = {
+	'\n': 'enter',
+	'\r': 'enter',
+	'\t': 'tab',
+}
 
 /** Button bits of a PointerEvent mask. */
 export const POINTER_BUTTONS = {
@@ -374,7 +381,8 @@ export class VncSession extends EventEmitter<VncSessionEvents> {
 	/**
 	 * Types text one character at a time at `cps` characters per second.
 	 * Characters a US keyboard reaches with shift are wrapped in a shift press;
-	 * newline and tab go out as enter and tab.
+	 * newline, carriage return and tab go out as enter and tab, and any other
+	 * control character is skipped.
 	 */
 	async type(text: string, options: TypeOptions = {}): Promise<void> {
 		const cps = options.cps ?? DEFAULT_CPS
@@ -382,9 +390,11 @@ export class VncSession extends EventEmitter<VncSessionEvents> {
 		const shift = charToKeysym('shift')
 		let first = true
 		for (const char of text) {
+			const named = TYPED_CONTROL_KEYS[char]
+			if (named === undefined && /^[\0-\x1f\x7f]$/.test(char)) continue
 			if (!first) await sleep(1000 / cps)
 			first = false
-			const keysym = charToKeysym(char === '\n' ? 'enter' : char === '\t' ? 'tab' : char)
+			const keysym = charToKeysym(named ?? char)
 			const shifted = SHIFTED_CHARS.has(char)
 			if (shifted) this.sendKeyEvent(true, shift)
 			this.sendKeyEvent(true, keysym)

@@ -551,6 +551,22 @@ describe('keyboard', () => {
 		])
 	})
 
+	test('type sends a carriage return as enter and skips other control characters', async () => {
+		const { session, socket } = await connected()
+		const before = socket.sent.length
+		await session.type('a\r\x07\x1b[b\x7f', { cps: 1000 })
+		expect(keyEvents(socket.since(before))).toEqual([
+			[1, 0x61],
+			[0, 0x61],
+			[1, 0xff0d],
+			[0, 0xff0d],
+			[1, 0x5b],
+			[0, 0x5b],
+			[1, 0x62],
+			[0, 0x62],
+		])
+	})
+
 	test('type paces characters at cps', async () => {
 		const { session } = await connected()
 		const started = Date.now()
