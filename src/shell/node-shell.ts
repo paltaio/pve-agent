@@ -8,8 +8,12 @@
 
 import type { PveClient } from '../core/client.ts'
 import { PveShellCredentialError } from './errors.ts'
+import { PctShell } from './lxc.ts'
+import { AptShell } from './packages.ts'
 import { CommandPolicy } from './policy.ts'
+import { QmShell } from './qemu.ts'
 import { probeSsh, SshTransport, type SshOptions } from './ssh.ts'
+import { SystemdShell } from './systemd.ts'
 import { openTermproxy, type TermproxyOptions } from './termproxy.ts'
 import type {
 	CommandResult,
@@ -18,6 +22,7 @@ import type {
 	ShellTransport,
 	ShellTransportKind,
 } from './types.ts'
+import { ZfsShell } from './zfs.ts'
 
 export type TransportChoice = 'auto' | ShellTransportKind
 
@@ -39,10 +44,21 @@ export class NodeShell {
 	readonly transport: ShellTransport
 	readonly policy: CommandPolicy
 
+	readonly zfs: ZfsShell
+	readonly systemd: SystemdShell
+	readonly apt: AptShell
+	readonly qm: QmShell
+	readonly pct: PctShell
+
 	constructor(transport: ShellTransport, policy: ShellPolicy = {}) {
 		this.node = transport.node
 		this.transport = transport
 		this.policy = new CommandPolicy(policy)
+		this.zfs = new ZfsShell(this)
+		this.systemd = new SystemdShell(this)
+		this.apt = new AptShell(this)
+		this.qm = new QmShell(this)
+		this.pct = new PctShell(this)
 	}
 
 	/** Open a shell on a node, picking the transport. */
