@@ -83,6 +83,27 @@ const shot = await vm.kvm.screenshot({ format: 'png' })
 console.log(shot.width, shot.height)
 ```
 
+A guest that turned its own display off (DPMS, seen on a Debian 13 GNOME
+guest) keeps the full-size frame but paints it black, and shift alone does not
+wake it. After a capture, check for an all-black frame and send a key the guest
+handles, such as enter:
+
+```ts
+import pve from 'pve-agent'
+
+await using cluster = await pve.connect()
+const vm = cluster.vm(100)
+
+const off = await vm.kvm.match({ kind: 'color', color: '#000000', area: 0.99 })
+if (off.matched) {
+	const dark = await vm.kvm.snapshot()
+	await vm.kvm.press('enter')
+	await vm.kvm.waitForScreen({ kind: 'changed', since: dark }, { timeoutMs: 10_000 })
+}
+const shot = await vm.kvm.screenshot({ format: 'png' })
+console.log(shot.width, shot.height)
+```
+
 ### Waiting for a screen
 
 ```ts
