@@ -9,6 +9,10 @@ import {
 import {
 	alpineTemplate,
 	ensureRunning,
+	fixtures,
+	has,
+	hasScratchCt,
+	hasScratchVm,
 	LIBRARY_CT,
 	LIVE,
 	liveSession,
@@ -43,7 +47,7 @@ describe.skipIf(!LIVE)('guest', () => {
 		await session.close()
 	}, 5 * MINUTE)
 
-	test(
+	test.skipIf(!has.targetVm || !has.libraryCt)(
 		'discovery finds the target VM and the library container',
 		async () => {
 			const guests = await cluster().list()
@@ -59,12 +63,12 @@ describe.skipIf(!LIVE)('guest', () => {
 			if (!(container instanceof PveContainer)) {
 				throw new Error(`Guest ${LIBRARY_CT} is a ${container.type}, not a container`)
 			}
-			expect((await container.config()).hostname).toBe('image-library')
+			expect((await container.config()).hostname).toBe(fixtures.guests.get(LIBRARY_CT)?.name)
 		},
 		30 * SECOND,
 	)
 
-	test(
+	test.skipIf(!hasScratchVm)(
 		'a scratch VM goes through create, start, snapshot, rollback and delete',
 		async () => {
 			const vm = await cluster().createVm({
@@ -113,14 +117,14 @@ describe.skipIf(!LIVE)('guest', () => {
 		10 * MINUTE,
 	)
 
-	test(
+	test.skipIf(!hasScratchCt)(
 		'a scratch container goes through create, start, snapshot and delete',
 		async () => {
 			const container = await cluster().createContainer({
 				node: SCRATCH_NODE,
 				vmid: SCRATCH_CT,
 				hostname: `${SCRATCH_PREFIX}ct`,
-				ostemplate: await alpineTemplate(cluster()),
+				ostemplate: alpineTemplate(),
 				rootfs: `${SCRATCH_STORAGE}:1`,
 				memory: 256,
 				unprivileged: true,
@@ -150,7 +154,7 @@ describe.skipIf(!LIVE)('guest', () => {
 		10 * MINUTE,
 	)
 
-	test(
+	test.skipIf(!has.targetVm)(
 		'the guest agent of the target VM answers commands and file transfers',
 		async () => {
 			const vm = cluster().vm(TARGET_VM, TARGET_NODE)
@@ -158,7 +162,7 @@ describe.skipIf(!LIVE)('guest', () => {
 			const agent = vm.guest
 
 			await agent.ping()
-			expect((await agent.osInfo()).id).toBe('debian')
+			expect((await agent.osInfo()).id?.length).toBeGreaterThan(0)
 			expect(await agent.output(['uname', '-a'])).toContain('Linux')
 
 			const failure = agent.output(['sh', '-c', 'exit 3'])

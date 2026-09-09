@@ -7,6 +7,7 @@ import {
 } from '../../src/index.ts'
 import {
 	CLUSTER_VERSION,
+	has,
 	LIVE,
 	liveSession,
 	MINUTE,
@@ -52,18 +53,24 @@ describe.skipIf(!LIVE)('auth', () => {
 		30 * SECOND,
 	)
 
-	test('a root-only endpoint is refused before any request goes out', async () => {
-		const client = session.cluster().client
-		const decision = client.requiredTier('POST', EXECUTE_PATH)
-		expect(decision.tier).toBe('ticket')
-		expect(decision.requiresRootPam).toBe(true)
-
-		traces.length = 0
-		await expect(client.post(EXECUTE_PATH, { commands: '[]' })).rejects.toBeInstanceOf(PveTierError)
-		expect(traces.filter((trace) => trace.path === EXECUTE_PATH)).toEqual([])
-	})
-
 	test(
+		'a root-only endpoint is refused before any request goes out',
+		async () => {
+			const client = session.cluster().client
+			const decision = client.requiredTier('POST', EXECUTE_PATH)
+			expect(decision.tier).toBe('ticket')
+			expect(decision.requiresRootPam).toBe(true)
+
+			traces.length = 0
+			await expect(client.post(EXECUTE_PATH, { commands: '[]' })).rejects.toBeInstanceOf(
+				PveTierError,
+			)
+			expect(traces.filter((trace) => trace.path === EXECUTE_PATH)).toEqual([])
+		},
+		30 * SECOND,
+	)
+
+	test.skipIf(!has.scratchNode)(
 		'the config of an unknown vmid is a PveNotFoundError',
 		async () => {
 			const vm = session.cluster().vm(UNKNOWN_VMID, SCRATCH_NODE)
@@ -72,7 +79,7 @@ describe.skipIf(!LIVE)('auth', () => {
 		30 * SECOND,
 	)
 
-	test(
+	test.skipIf(!has.targetVm)(
 		'an async config write returns a UPID with a status and a log',
 		async () => {
 			const cluster = session.cluster()

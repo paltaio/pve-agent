@@ -2,9 +2,11 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import type { PveNode } from '../../src/index.ts'
 import {
 	CLUSTER_VERSION,
+	has,
 	LIVE,
 	liveSession,
 	MINUTE,
+	SCRATCH_BRIDGE,
 	SCRATCH_NODE,
 	SCRATCH_POOL,
 	SCRATCH_STORAGE,
@@ -14,7 +16,7 @@ import {
 const session = liveSession()
 const node = (): PveNode => session.cluster().node(SCRATCH_NODE)
 
-describe.skipIf(!LIVE)(`node ${SCRATCH_NODE}`, () => {
+describe.skipIf(!LIVE || !has.scratchNode)(`node ${SCRATCH_NODE}`, () => {
 	beforeAll(() => session.open(), MINUTE)
 	afterAll(() => session.close(), MINUTE)
 
@@ -31,20 +33,18 @@ describe.skipIf(!LIVE)(`node ${SCRATCH_NODE}`, () => {
 		30 * SECOND,
 	)
 
-	test(
-		'the network has both bridges',
+	test.skipIf(!has.bridge)(
+		'the network lists the scratch bridge as active',
 		async () => {
 			const interfaces = await node().api.network.list()
-			const bridges = interfaces
-				.filter((entry) => entry.type === 'bridge')
-				.map((entry) => entry.iface)
-			expect(bridges).toContain('vmbr0')
-			expect(bridges).toContain('vmbr1')
+			const bridge = interfaces.find((entry) => entry.iface === SCRATCH_BRIDGE)
+			expect(bridge?.type).toBe('bridge')
+			expect(bridge?.active).toBe(true)
 		},
 		30 * SECOND,
 	)
 
-	test(
+	test.skipIf(!has.storage || !has.pool)(
 		'storage, disks and zfs pools',
 		async () => {
 			const storages = await node().api.storage.list()
@@ -63,7 +63,8 @@ describe.skipIf(!LIVE)(`node ${SCRATCH_NODE}`, () => {
 		async () => {
 			const versions = await node().api.apt.versions()
 			const manager = versions.find((entry) => entry.Package === 'pve-manager')
-			expect(manager?.Version).toContain(CLUSTER_VERSION)
+			// Version is the candidate once an upgrade is available; OldVersion is what is installed.
+			expect(manager?.OldVersion ?? manager?.Version).toContain(CLUSTER_VERSION)
 		},
 		30 * SECOND,
 	)

@@ -3,17 +3,18 @@ import { pixelAt, type GuestConsole, type PveVm, type VmKvm } from '../../src/in
 import {
 	ensureRunning,
 	guestPassword,
+	has,
 	LIVE,
 	liveSession,
 	MINUTE,
 	SECOND,
 	TARGET_NODE,
+	TARGET_SCREEN,
 	TARGET_USER,
 	TARGET_VM,
 } from './support.ts'
 
-const DESKTOP_WIDTH = 1280
-const DESKTOP_HEIGHT = 800
+const [DESKTOP_WIDTH = 0, DESKTOP_HEIGHT = 0] = TARGET_SCREEN.split('x').map(Number)
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const LOGIN_PROMPT = /login: ?$/
 const SERIAL_GETTY = 'serial-getty@ttyS0.service'
@@ -22,7 +23,7 @@ const session = liveSession()
 const vm = (): PveVm => session.cluster().vm(TARGET_VM, TARGET_NODE)
 const kvm = (): VmKvm => vm().kvm
 
-/** A reboot of the target leaves the serial getty inactive; the agent brings it back. */
+/** A getty started by hand does not survive a reboot; the agent starts it again. */
 async function ensureSerialGetty(target: PveVm): Promise<void> {
 	const state = await target.guest.exec(['systemctl', 'is-active', SERIAL_GETTY])
 	if (state.stdout.trim() === 'active') return
@@ -38,7 +39,7 @@ async function reachLoginPrompt(serial: GuestConsole): Promise<void> {
 	await serial.waitForPrompt({ pattern: LOGIN_PROMPT, timeoutMs: 30 * SECOND })
 }
 
-describe.skipIf(!LIVE)('console', () => {
+describe.skipIf(!LIVE || !has.targetVm)('console', () => {
 	beforeAll(async () => {
 		await session.open()
 		await ensureRunning(vm())

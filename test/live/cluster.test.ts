@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import type { PveCluster } from '../../src/index.ts'
 import {
+	has,
 	LIBRARY_CT,
 	LIVE,
 	liveSession,
@@ -38,20 +39,26 @@ describe.skipIf(!LIVE)('cluster', () => {
 	}, MINUTE)
 
 	test(
-		'the status reports three quorate nodes',
+		'the status reports every node and a quorate cluster',
 		async () => {
-			const rows = await session.cluster().api.status()
+			const cluster = session.cluster()
+			const entries = await cluster.nodes()
+			const rows = await cluster.api.status()
 			const summary = rows.find((row) => row.type === 'cluster')
-			expect(summary?.nodes).toBe(3)
+			expect(summary?.nodes).toBe(entries.length)
 			expect(summary?.quorate).toBe(true)
-			const nodes = rows.filter((row) => row.type === 'node')
-			expect(nodes).toHaveLength(3)
-			expect(nodes.every((node) => node.online === true)).toBe(true)
+			const online = rows.filter((row) => row.type === 'node' && row.online === true)
+			expect(online.map((row) => row.name).sort()).toEqual(
+				entries
+					.filter((entry) => entry.status === 'online')
+					.map((entry) => entry.node)
+					.sort(),
+			)
 		},
 		30 * SECOND,
 	)
 
-	test(
+	test.skipIf(!has.targetVm || !has.libraryCt)(
 		'the resources include the target guests',
 		async () => {
 			const vmids = (await session.cluster().api.resources({ type: 'vm' })).map((row) => row.vmid)
@@ -71,18 +78,19 @@ describe.skipIf(!LIVE)('cluster', () => {
 		30 * SECOND,
 	)
 
-	test(
-		'the storage definitions include both zfs pools',
+	test.skipIf(!has.storage)(
+		'the storage definitions include the scratch storage',
 		async () => {
-			const names = (await session.cluster().api.storage.list()).map((entry) => entry.storage)
-			expect(names).toContain('tank-vms')
-			expect(names).toContain(SCRATCH_STORAGE)
+			const definitions = await session.cluster().api.storage.list()
+			const scratch = definitions.find((entry) => entry.storage === SCRATCH_STORAGE)
+			expect(scratch?.type.length).toBeGreaterThan(0)
+			expect(definitions.every((entry) => entry.storage.length > 0)).toBe(true)
 		},
 		30 * SECOND,
 	)
 
 	test(
-		'HA, backup, replication and firewall lists answer',
+		'HA, backup, replication and firewall lists answer with typed rows',
 		async () => {
 			const api = session.cluster().api
 			const [ha, backups, replication, rules] = await Promise.all([
@@ -91,15 +99,15 @@ describe.skipIf(!LIVE)('cluster', () => {
 				api.replication.list(),
 				api.firewall.rules.list(),
 			])
-			expect(Array.isArray(ha)).toBe(true)
-			expect(Array.isArray(backups)).toBe(true)
-			expect(Array.isArray(replication)).toBe(true)
-			expect(Array.isArray(rules)).toBe(true)
+			for (const resource of ha) expect(resource.sid).toMatch(/^(vm|ct):\d+$/)
+			for (const job of backups) expect(job.id.length).toBeGreaterThan(0)
+			for (const job of replication) expect(job.id).toMatch(/^\d+-\d+$/)
+			rules.forEach((rule, index) => expect(rule.pos).toBe(index))
 		},
 		30 * SECOND,
 	)
 
-	test(
+	test.skipIf(!has.targetVm)(
 		'a pool is created, filled, emptied and deleted',
 		async () => {
 			const pools = session.cluster().api.pools

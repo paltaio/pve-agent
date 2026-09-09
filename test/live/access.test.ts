@@ -30,12 +30,13 @@ describe.skipIf(!LIVE)('access', () => {
 	}, MINUTE)
 
 	test(
-		'the user list has the root and the API user',
+		'the user list has root and the configured users',
 		async () => {
-			const users = await session.cluster().access.listUsers()
-			const ids = users.map((user) => user.userid)
+			const cluster = session.cluster()
+			const ids = (await cluster.access.listUsers()).map((user) => user.userid)
 			expect(ids).toContain('root@pam')
-			expect(ids).toContain('agents@pve')
+			const ticketUser = cluster.client.auth.ticketUsername
+			if (ticketUser !== undefined) expect(ids).toContain(ticketUser)
 		},
 		30 * SECOND,
 	)

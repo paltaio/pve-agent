@@ -8,6 +8,7 @@ import {
 } from '../../src/index.ts'
 import {
 	ensureRunning,
+	has,
 	LIVE,
 	LIVE_ALL,
 	liveSession,
@@ -37,9 +38,15 @@ function darwin(os: AnyGuestOs): DarwinGuest {
 	throw new Error(`VM ${os.vmid} runs ${os.os}, not darwin`)
 }
 
+/** The vmids this run booted, so the cleanup stops those and no other. */
+const bootedHere = new Set<number>()
+
 /** Boots a desktop VM that is normally off and waits for its agent. */
 async function bootDesktop(vm: PveVm): Promise<void> {
-	if ((await vm.status()).runState === 'stopped') await vm.start()
+	if ((await vm.status()).runState === 'stopped') {
+		await vm.start()
+		bootedHere.add(vm.vmid)
+	}
 	await vm.waitFor('running', { timeoutMs: 2 * MINUTE })
 	await waitForAgent(vm, 10 * MINUTE)
 }
@@ -47,9 +54,12 @@ async function bootDesktop(vm: PveVm): Promise<void> {
 async function shutDown(vm: PveVm): Promise<void> {
 	await vm.shutdown({ timeout: 300, forceStop: true })
 	await vm.waitFor('stopped', { timeoutMs: 5 * MINUTE })
+	bootedHere.delete(vm.vmid)
 }
 
-async function stopIfRunning(vm: PveVm): Promise<void> {
+/** Stops a desktop this run booted and a failed test left running. */
+async function stopIfBootedHere(vm: PveVm): Promise<void> {
+	if (!bootedHere.has(vm.vmid)) return
 	if ((await vm.status()).runState === 'stopped') return
 	await vm.stop()
 	await vm.waitFor('stopped', { timeoutMs: 2 * MINUTE })
@@ -59,7 +69,7 @@ describe.skipIf(!LIVE)('guest os', () => {
 	beforeAll(() => session.open(), MINUTE)
 	afterAll(() => session.close(), MINUTE)
 
-	describe('linux', () => {
+	describe.skipIf(!has.targetVm)('linux', () => {
 		test(
 			'the helper runs commands, moves files and describes the system',
 			async () => {
@@ -80,17 +90,18 @@ describe.skipIf(!LIVE)('guest os', () => {
 				await os.delete(file)
 				expect(await os.exists(file)).toBe(false)
 
-				expect(await os.hostname()).toBe('debian-vm')
+				expect(await os.hostname()).toBe(await vm.guest.hostName())
 				const info = await os.osInfo()
 				expect(info.os).toBe('linux')
-				expect(info.id).toBe('debian')
+				const release = await os.readFile('/etc/os-release')
+				expect(info.id).toBe(/^ID="?([^"\n]*)"?$/m.exec(release)?.[1] ?? '')
 			},
 			5 * MINUTE,
 		)
 	})
 
-	describe.skipIf(!LIVE_ALL)(`windows VM ${WINDOWS_VM}`, () => {
-		afterAll(() => stopIfRunning(session.cluster().vm(WINDOWS_VM, TARGET_NODE)), 5 * MINUTE)
+	describe.skipIf(!LIVE_ALL || !has.windowsVm)(`windows VM ${WINDOWS_VM}`, () => {
+		afterAll(() => stopIfBootedHere(session.cluster().vm(WINDOWS_VM, TARGET_NODE)), 5 * MINUTE)
 
 		test(
 			'boots, answers cmd and PowerShell, moves a file and shuts down',
@@ -119,8 +130,8 @@ describe.skipIf(!LIVE)('guest os', () => {
 		)
 	})
 
-	describe.skipIf(!LIVE_ALL)(`macos VM ${MACOS_VM}`, () => {
-		afterAll(() => stopIfRunning(session.cluster().vm(MACOS_VM, TARGET_NODE)), 5 * MINUTE)
+	describe.skipIf(!LIVE_ALL || !has.macosVm)(`macos VM ${MACOS_VM}`, () => {
+		afterAll(() => stopIfBootedHere(session.cluster().vm(MACOS_VM, TARGET_NODE)), 5 * MINUTE)
 
 		test(
 			'boots, reports its version, moves a file and shuts down',

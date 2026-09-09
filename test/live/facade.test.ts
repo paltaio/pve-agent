@@ -3,6 +3,7 @@ import { PveContainer, PveVm } from '../../src/index.ts'
 import {
 	CLUSTER_VERSION,
 	connectLive,
+	has,
 	LIBRARY_CT,
 	LIVE,
 	MINUTE,
@@ -13,6 +14,7 @@ import {
 } from './support.ts'
 
 const API_PORT = 8006
+const HAS_SS = Bun.which('ss') !== null
 
 /** Established TCP connections from this process to the API port, as `ss` reports them. */
 async function apiConnections(): Promise<string[]> {
@@ -25,13 +27,13 @@ async function apiConnections(): Promise<string[]> {
 }
 
 describe.skipIf(!LIVE)('facade', () => {
-	test(
+	test.skipIf(!has.scratchNode || !has.targetVm || !has.libraryCt)(
 		'a cluster opened with await using reaches nodes, guests, notes and a node shell',
 		async () => {
 			await using cluster = await connectLive()
 
 			expect((await cluster.version()).version).toBe(CLUSTER_VERSION)
-			expect(await cluster.nodes()).toHaveLength(3)
+			expect((await cluster.nodes()).map((entry) => entry.node)).toContain(SCRATCH_NODE)
 
 			const vmids = (await cluster.list()).map((guest) => guest.vmid)
 			expect(vmids).toContain(TARGET_VM)
@@ -59,7 +61,7 @@ describe.skipIf(!LIVE)('facade', () => {
 		3 * MINUTE,
 	)
 
-	test(
+	test.skipIf(!HAS_SS || !has.scratchNode)(
 		'close drops every connection to the API port',
 		async () => {
 			const cluster = await connectLive()

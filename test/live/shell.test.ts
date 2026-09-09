@@ -15,6 +15,8 @@ import {
 import {
 	alpineTemplate,
 	CLUSTER_VERSION,
+	has,
+	hasScratchCt,
 	LIBRARY_CT,
 	LIVE,
 	liveSession,
@@ -46,12 +48,13 @@ async function destructiveShell(): Promise<NodeShell> {
 }
 
 async function removeTestDataset(): Promise<void> {
+	if (!has.pool) return
 	const datasets = await (await shell()).zfs.listDatasets({ target: SCRATCH_POOL, depth: 1 })
 	if (!datasets.some((dataset) => dataset.name === TEST_DATASET)) return
 	await (await destructiveShell()).zfs.destroyDataset(TEST_DATASET, { recursive: true })
 }
 
-describe.skipIf(!LIVE)('shell', () => {
+describe.skipIf(!LIVE || !has.scratchNode)('shell', () => {
 	beforeAll(async () => {
 		await session.open()
 		await removeTestDataset()
@@ -121,7 +124,7 @@ describe.skipIf(!LIVE)('shell', () => {
 	)
 
 	test(
-		'rm -rf / is refused by the policy before anything is spawned',
+		'a destructive command is refused by the policy before anything is spawned',
 		async () => {
 			const spawned: SpawnRequest[] = []
 			const watched = await NodeShell.open({
@@ -135,7 +138,9 @@ describe.skipIf(!LIVE)('shell', () => {
 			})
 			try {
 				spawned.length = 0
-				await expect(watched.run('rm -rf /')).rejects.toBeInstanceOf(PveShellPolicyError)
+				await expect(watched.run('zfs destroy nosuchpool/nosuchset')).rejects.toBeInstanceOf(
+					PveShellPolicyError,
+				)
 				expect(spawned).toEqual([])
 			} finally {
 				await watched.close()
@@ -144,7 +149,7 @@ describe.skipIf(!LIVE)('shell', () => {
 		MINUTE,
 	)
 
-	test(
+	test.skipIf(!has.pool)(
 		'zfs lists the pool, then creates, snapshots and destroys a dataset',
 		async () => {
 			const node = await shell()
@@ -193,28 +198,28 @@ describe.skipIf(!LIVE)('shell', () => {
 		MINUTE,
 	)
 
-	test(
+	test.skipIf(!has.targetVm || !has.libraryCt)(
 		'qm and pct see the target guests on their node',
 		async () => {
 			const node = await cluster().node(TARGET_NODE).shell
 			const vms = await node.qm.list()
 			expect(vms.map((entry) => entry.vmid)).toContain(TARGET_VM)
 			const config = await node.qm.config(TARGET_VM)
-			expect(config['name']).toBe('linux-target-1')
+			expect(config['name']).toBe((await cluster().vm(TARGET_VM, TARGET_NODE).config()).name)
 			const containers = await node.pct.list()
 			expect(containers.map((entry) => entry.vmid)).toContain(LIBRARY_CT)
 		},
 		MINUTE,
 	)
 
-	test(
+	test.skipIf(!hasScratchCt)(
 		'pct exec, push, pull and df on a scratch container',
 		async () => {
 			const container = await cluster().createContainer({
 				node: SCRATCH_NODE,
 				vmid: SCRATCH_CT,
 				hostname: `${SCRATCH_PREFIX}ct`,
-				ostemplate: await alpineTemplate(cluster()),
+				ostemplate: alpineTemplate(),
 				rootfs: `${SCRATCH_STORAGE}:1`,
 				memory: 256,
 				unprivileged: true,
