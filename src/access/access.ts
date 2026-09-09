@@ -535,12 +535,25 @@ export class AccessApi {
 	 * propagation are resolved.
 	 */
 	async permissions(options?: AccessPermissionsGetParams): Promise<EffectivePermissions> {
-		return this.client.get<EffectivePermissions>('/access/permissions', options)
+		const raw = record(await this.client.get<unknown>('/access/permissions', options))
+		const permissions: EffectivePermissions = {}
+		for (const [path, privileges] of Object.entries(raw)) {
+			const flags: Record<string, number> = {}
+			for (const [name, flag] of Object.entries(record(privileges))) {
+				flags[name] = toOptionalNumber(flag) ?? 0
+			}
+			permissions[path] = flags
+		}
+		return permissions
 	}
 
 	/** Authentication realms. */
 	async listRealms(): Promise<AuthRealm[]> {
-		return this.client.get<AuthRealm[]>('/access/domains')
+		return records(await this.client.get<unknown>('/access/domains')).map((row) => ({
+			...row,
+			realm: String(row['realm'] ?? ''),
+			type: String(row['type'] ?? ''),
+		}))
 	}
 
 	/** One realm's configuration, with the fields its type uses. */
