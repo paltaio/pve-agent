@@ -8,15 +8,14 @@
  * PVE_NODE (default: the PVE_NODE of the env file) for the shell policy
  * check. The target's notes are changed through an asynchronous config
  * write and restored before the script exits. The shell check needs an SSH
- * key for root on the node, or a root@pam ticket in the env file.
+ * key for root on the node, or a root@pam ticket in the env file. The tier
+ * check needs an env file whose PVE_USER is not root@pam: a root@pam ticket
+ * satisfies the root-only endpoint and the call goes through.
  */
 
 import pve, {
 	formatPropertyString,
 	GuestCommandError,
-	loadCredentials,
-	PveClient,
-	PveCluster,
 	PveError,
 	PveNotFoundError,
 	PvePropertyError,
@@ -97,11 +96,7 @@ const execute = `/nodes/${node.name}/execute`
 const decision = cluster.client.requiredTier('POST', execute)
 console.log(`requiredTier POST ${execute}: ${decision.tier}, root@pam ${decision.requiresRootPam}`)
 console.log(`  ${decision.reason}`)
-const { connection, token } = loadCredentials()
-await using tokenOnly = new PveCluster(
-	new PveClient({ credentials: token === undefined ? { connection } : { connection, token } }),
-)
-await expectError('tier', () => tokenOnly.client.post(execute, { commands: '[]' }))
+await expectError('tier', () => cluster.client.post(execute, { commands: '[]' }))
 
 await expectError('guest-command', () => vm.guest.output(['sh', '-c', 'exit 3']))
 
