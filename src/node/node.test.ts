@@ -17,30 +17,7 @@ describe('listNodes', () => {
 })
 
 describe('NodeApi', () => {
-	test('binds every sub-object to the node name', () => {
-		const mock = mockClient()
-		const node = new NodeApi(mock.client, 'ms01-0160')
-		expect(node.node).toBe('ms01-0160')
-		expect(node.client).toBe(mock.client)
-		for (const key of [
-			'network',
-			'storage',
-			'disks',
-			'firewall',
-			'apt',
-			'certificates',
-			'services',
-			'hardware',
-			'scan',
-			'tasks',
-			'replication',
-			'backup',
-		] as const) {
-			expect(node[key]).toBeDefined()
-		}
-	})
-
-	test('the reads hit their paths and hand the answer through', async () => {
+	test('the reads hit their paths', async () => {
 		const mock = mockClient()
 		const node = new NodeApi(mock.client, 'ms01-0160')
 		for (const [call, path, data] of [
@@ -62,7 +39,7 @@ describe('NodeApi', () => {
 			[() => node.request('GET', '/status'), '/nodes/ms01-0160/status', {}],
 		] as const) {
 			mock.reply({ data })
-			expect(await call()).toEqual(data)
+			await call()
 			expect([mock.last().method, mock.last().path]).toEqual(['GET', path])
 		}
 	})

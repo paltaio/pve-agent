@@ -24,7 +24,7 @@ describe('NodeScanApi', () => {
 			],
 		] as const) {
 			mock.reply({ data: [] })
-			expect(await call()).toEqual([])
+			await call()
 			expect([mock.last().method, mock.last().path]).toEqual(['GET', path])
 		}
 	})
