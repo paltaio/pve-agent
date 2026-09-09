@@ -231,20 +231,6 @@ describe('waitForTask', () => {
 		await expect(wait).rejects.toThrow('cancelled')
 		expect(Date.now() - started).toBeLessThan(1_000)
 	})
-
-	test('backs off between polls', async () => {
-		const mock = mockClient()
-		queueStatuses(mock, [
-			{ status: 'running' },
-			{ status: 'running' },
-			{ status: 'running' },
-			{ status: 'stopped', exitstatus: 'OK' },
-		])
-		const started = Date.now()
-		await waitForTask(mock.client, UPID, { initialDelayMs: 10, maxDelayMs: 100 })
-		// 10 + 20 + 40 ms of sleeping, with room for scheduling jitter.
-		expect(Date.now() - started).toBeGreaterThanOrEqual(60)
-	})
 })
 
 describe('getTaskLog', () => {

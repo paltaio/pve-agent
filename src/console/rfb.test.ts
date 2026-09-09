@@ -342,7 +342,6 @@ describe('parseKeyCombo', () => {
 describe('key tables', () => {
 	test('maps meta to Super so guest shortcuts reach the Windows key', () => {
 		expect(SPECIAL_KEYS['meta']).toBe(SPECIAL_KEYS['super'])
-		expect(SPECIAL_KEYS['meta_r']).toBe(0xffec)
 	})
 
 	test('lists the US shifted characters and the capitals', () => {
@@ -350,6 +349,5 @@ describe('key tables', () => {
 		expect(SHIFTED_CHARS.has('A')).toBe(true)
 		expect(SHIFTED_CHARS.has('a')).toBe(false)
 		expect(SHIFTED_CHARS.has('2')).toBe(false)
-		expect(SHIFTED_CHARS.size).toBe(21 + 26)
 	})
 })

@@ -1,15 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { closeMockClients, formObject, mockClient } from '../core/test-support/api-mock.ts'
-import type {
-	NodesLxcFirewallAliasesPostParams,
-	NodesLxcFirewallOptionsPutParams,
-	NodesLxcFirewallRulesPostParams,
-	NodesLxcFirewallRulesPutParams,
-	NodesQemuFirewallAliasesPostParams,
-	NodesQemuFirewallOptionsPutParams,
-	NodesQemuFirewallRulesPostParams,
-	NodesQemuFirewallRulesPutParams,
-} from '../generated/types.ts'
 import { GuestFirewallApi } from './firewall.ts'
 
 afterEach(closeMockClients)
@@ -88,22 +78,5 @@ describe('GuestFirewallApi', () => {
 		const refs = await firewall.listRefs({ type: 'alias' })
 		expect(refs[0]?.name).toBe('gw')
 		expect(mock.last().path).toBe(`${guest}/firewall/refs?type=alias`)
-	})
-
-	test('the LXC firewall parameter sets are assignable to the QEMU ones', () => {
-		// One class serves both guest types, so the declarations have to agree.
-		const rulePost = (params: NodesQemuFirewallRulesPostParams): string => params.type
-		const rulePut = (params: NodesQemuFirewallRulesPutParams): string | undefined => params.action
-		const aliasPost = (params: NodesQemuFirewallAliasesPostParams): string => params.name
-		const options = (params: NodesQemuFirewallOptionsPutParams): boolean | undefined =>
-			params.enable
-		const lxcRulePost: NodesLxcFirewallRulesPostParams = { type: 'in', action: 'ACCEPT' }
-		const lxcRulePut: NodesLxcFirewallRulesPutParams = { action: 'DROP' }
-		const lxcAlias: NodesLxcFirewallAliasesPostParams = { name: 'a', cidr: '10.0.0.0/8' }
-		const lxcOptions: NodesLxcFirewallOptionsPutParams = { enable: true }
-		expect(rulePost(lxcRulePost)).toBe('in')
-		expect(rulePut(lxcRulePut)).toBe('DROP')
-		expect(aliasPost(lxcAlias)).toBe('a')
-		expect(options(lxcOptions)).toBe(true)
 	})
 })

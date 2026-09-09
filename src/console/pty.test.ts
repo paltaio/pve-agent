@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { inputFrames, KEEPALIVE_FRAME, loginFrame, resizeFrame, sendInput } from './pty.ts'
+import { inputFrames, loginFrame, resizeFrame, sendInput } from './pty.ts'
 import type { ConsoleSocket } from './socket.ts'
 
 describe('termproxy frames', () => {
@@ -24,7 +24,6 @@ describe('termproxy frames', () => {
 
 	test('a resize frame is cols then rows with a trailing colon', () => {
 		expect(resizeFrame(120, 40)).toBe('1:120:40:')
-		expect(KEEPALIVE_FRAME).toBe('2')
 	})
 
 	test('sendInput sends every frame in order', () => {

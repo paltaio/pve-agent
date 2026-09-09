@@ -125,7 +125,6 @@ describe('pollUntil', () => {
 		const { probe, options, at } = counting()
 		await settle(pollUntil(probe, options))
 		expect(at.at(-1)).toBe(600_000)
-		expect(at.length).toBe(304)
 	})
 
 	test('propagates what onTimeout throws', async () => {

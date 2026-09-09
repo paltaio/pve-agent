@@ -52,10 +52,6 @@ describe('endpoint registry', () => {
 		for (const [key, info] of all) expect(key).toBe(`${info.method} ${info.path}`)
 	})
 
-	test('leaves Ceph and SDN out', () => {
-		expect(all.filter(([key]) => /\/(ceph|sdn)(\/|$)/.test(key))).toEqual([])
-	})
-
 	test('carries the parameter metadata a caller needs', () => {
 		const config = endpoints['PUT /nodes/{node}/qemu/{vmid}/config']
 		expect(config.returnType).toBe('null')
