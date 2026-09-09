@@ -12,7 +12,7 @@
  */
 
 import type { PveClient } from '../core/client.ts'
-import { GuestCommandError, PveTimeoutError } from '../core/errors.ts'
+import { GuestCommandError, PveConfigError, PveTimeoutError } from '../core/errors.ts'
 import { pollUntil, type PollOptions } from '../core/poll.ts'
 import { toBoolean, toOptionalNumber } from '../core/values.ts'
 import type {
@@ -130,6 +130,9 @@ function normalizeExecStatus(raw: Readonly<Record<string, unknown>>): AgentExecS
 		raw,
 	}
 }
+
+/** Bytes one file-write call carries: the endpoint caps `content` at 61440 base64 characters. */
+export const FILE_WRITE_MAX_BYTES = 46080
 
 export class QemuAgent {
 	readonly client: PveClient
@@ -342,10 +345,18 @@ export class QemuAgent {
 
 	/**
 	 * Writes a file inside the guest, replacing it. The bytes go over as
-	 * base64 built here, so any text or binary content survives the node.
+	 * base64 built here, so any text or binary content survives the node. One
+	 * call carries at most FILE_WRITE_MAX_BYTES; the endpoint has no append
+	 * mode, so a larger file goes through `GuestOs.writeFile`, which runs
+	 * commands in the guest.
 	 */
 	async fileWrite(file: string, content: string | Uint8Array): Promise<void> {
 		const bytes = typeof content === 'string' ? Buffer.from(content, 'utf8') : Buffer.from(content)
+		if (bytes.length > FILE_WRITE_MAX_BYTES) {
+			throw new PveConfigError(
+				`fileWrite carries at most ${FILE_WRITE_MAX_BYTES} bytes per call and ${file} is ${bytes.length}; write a larger file with GuestOs.writeFile`,
+			)
+		}
 		await this.client.post<null>(`${this.base}/file-write`, {
 			file,
 			content: bytes.toString('base64'),

@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { GuestCommandError, PveTimeoutError } from '../core/errors.ts'
+import { GuestCommandError, PveConfigError, PveTimeoutError } from '../core/errors.ts'
 import {
 	closeMockClients,
 	formFields,
 	formObject,
 	mockClient,
 } from '../core/test-support/api-mock.ts'
-import { QemuAgent } from './agent.ts'
+import { FILE_WRITE_MAX_BYTES, QemuAgent } from './agent.ts'
 
 afterEach(closeMockClients)
 
@@ -174,5 +174,24 @@ describe('files', () => {
 
 		await agent.fileWrite('/tmp/y', new Uint8Array([0, 255]))
 		expect(formObject(mock.last())['content']).toBe('AP8=')
+	})
+
+	test('fileWrite refuses content the endpoint cannot carry in one call', async () => {
+		const mock = mockClient()
+		const agent = new QemuAgent(mock.client, ref)
+		await agent.fileWrite('/tmp/max', Buffer.alloc(FILE_WRITE_MAX_BYTES, 1))
+		expect(formObject(mock.last())['content']).toHaveLength(61440)
+		await expect(
+			agent.fileWrite('/tmp/big', Buffer.alloc(FILE_WRITE_MAX_BYTES + 1)),
+		).rejects.toThrow(PveConfigError)
+		expect(mock.requests).toHaveLength(1)
+	})
+
+	test('fileRead reports a read the agent stopped early', async () => {
+		const mock = mockClient()
+		mock.reply({ data: { content: 'abc', truncated: 1, 'bytes-read': 3 } })
+		const file = await new QemuAgent(mock.client, ref).fileRead('/big')
+		expect(file.truncated).toBe(true)
+		expect(file.content).toBe('abc')
 	})
 })
