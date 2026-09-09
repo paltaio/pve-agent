@@ -49,6 +49,28 @@ describe('rootOnlyParams', () => {
 		expect(params('PUT', LXC_CONFIG, { hookscript: 'local:snippets/h' })).toEqual(['hookscript'])
 	})
 
+	test('flags the qemu options the permission check has no class for', () => {
+		expect(
+			params('PUT', QEMU_CONFIG, {
+				affinity: '0-3',
+				parallel0: '/dev/parport0',
+				ivshmem: 'size=1',
+				vmgenid: '1',
+				hugepages: '2',
+				cores: 2,
+			}),
+		).toEqual(['affinity', 'parallel0', 'ivshmem', 'vmgenid', 'hugepages'])
+		expect(
+			params('POST', '/nodes/{node}/qemu', { arch: 'aarch64', 'amd-sev': 'type=std' }),
+		).toEqual(['arch', 'amd-sev'])
+	})
+
+	test('flags a delete that names a root-only option', () => {
+		expect(params('PUT', QEMU_CONFIG, { delete: 'args,name' })).toEqual(['delete'])
+		expect(params('PUT', QEMU_CONFIG, { delete: 'parallel1' })).toEqual(['delete'])
+		expect(params('PUT', QEMU_CONFIG, { delete: 'name,memory' })).toEqual([])
+	})
+
 	test('reads the mount point value on lxc', () => {
 		expect(params('PUT', LXC_CONFIG, { mp0: '/srv/host,mp=/data' })).toEqual(['mp0'])
 		expect(params('PUT', LXC_CONFIG, { mp1: 'volume=/dev/sdb,mp=/data' })).toEqual(['mp1'])

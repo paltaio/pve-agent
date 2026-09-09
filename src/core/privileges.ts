@@ -33,6 +33,7 @@ const QEMU_GUEST = /^\/nodes\/\{node\}\/qemu\/\{vmid\}(\/|$)/
 const QEMU_START = /^\/nodes\/\{node\}\/qemu\/\{vmid\}\/status\/start$/
 const QEMU_STOP = /^\/nodes\/\{node\}\/qemu\/\{vmid\}\/status\/stop$/
 const QEMU_CREATE_OR_CONFIG = /^\/nodes\/\{node\}\/qemu(\/\{vmid\}\/config)?$/
+const QEMU_CONFIG = /^\/nodes\/\{node\}\/qemu\/\{vmid\}\/config$/
 const LXC_CREATE_OR_CONFIG = /^\/nodes\/\{node\}\/lxc(\/\{vmid\}\/config)?$/
 const GUEST_CREATE_OR_CONFIG = /^\/nodes\/\{node\}\/(qemu|lxc)(\/\{vmid\}\/config)?$/
 const GUEST = /^\/nodes\/\{node\}\/(qemu|lxc)\/\{vmid\}(\/|$)/
@@ -65,7 +66,56 @@ function hostDevice(value: unknown): string | undefined {
 	return parts.bare[0] ?? subKey(value, 'host')
 }
 
+/**
+ * QEMU config options the permission check assigns to no privilege class,
+ * which it refuses from anyone but root@pam. `args`, `lock` and `hookscript`
+ * have rules of their own.
+ */
+const UNCLASSED_QEMU_OPTIONS = [
+	'affinity',
+	'amd-sev',
+	'arch',
+	'hugepages',
+	'intel-tdx',
+	'ivshmem',
+	'keephugepages',
+	'spice_enhancements',
+	'vmgenid',
+] as const
+
+const UNCLASSED_REASON = 'the config permission check has no privilege class for this option'
+
+function isRootOnlyQemuOption(name: string): boolean {
+	return (
+		name === 'args' ||
+		name === 'lock' ||
+		name === 'hookscript' ||
+		/^parallel\d+$/.test(name) ||
+		UNCLASSED_QEMU_OPTIONS.some((option) => option === name)
+	)
+}
+
 export const ROOT_ONLY_PARAM_RULES: readonly RootOnlyParamRule[] = [
+	...UNCLASSED_QEMU_OPTIONS.map((param) => ({
+		param,
+		path: QEMU_CREATE_OR_CONFIG,
+		reason: UNCLASSED_REASON,
+	})),
+	{
+		param: 'parallel[n]',
+		path: QEMU_CREATE_OR_CONFIG,
+		reason: UNCLASSED_REASON,
+	},
+	{
+		param: 'delete',
+		path: QEMU_CONFIG,
+		reason:
+			'deleting an option needs the privilege setting it needs, and one of these is root-only',
+		applies: (value) =>
+			text(value)
+				.split(/[,;\s]+/)
+				.some(isRootOnlyQemuOption),
+	},
 	{
 		param: 'skiplock',
 		path: GUEST,
