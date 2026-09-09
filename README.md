@@ -14,22 +14,28 @@ agent, node shells.
 
 ## Install
 
-As a dependency:
+The skill, for every agent CLI found on this machine:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/paltaio/pve-agent/main/install-pve-skill | bash
+```
+
+Or from a clone:
+
+```sh
+git clone https://github.com/paltaio/pve-agent.git && cd pve-agent && ./install-pve-skill
+```
+
+The installer asks for the PVE host and a credential pair on the terminal and
+writes them to `pve.env` in the skill directory, mode 600. When `PVE_HOST` and
+`PVE_TOKEN_ID` with `PVE_TOKEN_SECRET`, or `PVE_USER` with `PVE_PASSWORD`, are
+set in the environment it asks nothing, which suits unattended installs;
+`PVE_PORT`, `PVE_NODE` and `PVE_VERIFY_SSL` are read the same way.
+
+The library, as a dependency:
 
 ```sh
 bun add github:paltaio/pve-agent
-```
-
-As a checkout:
-
-```sh
-git clone https://github.com/paltaio/pve-agent.git && cd pve-agent && bun install
-```
-
-The skill, from a checkout:
-
-```sh
-./install-pve-skill
 ```
 
 The installer detects each agent CLI by its binary on PATH or its config

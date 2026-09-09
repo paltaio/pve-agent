@@ -2,7 +2,17 @@
 
 ## Install
 
-As a dependency:
+The skill, for every agent CLI found on this machine:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/paltaio/pve-agent/main/install-pve-skill | bash
+```
+
+It asks for the PVE host and a credential pair, or reads `PVE_HOST` and the
+pair from the environment, and writes `pve.env` next to the skill. The README
+lists the CLIs it detects.
+
+The library, as a dependency:
 
 ```sh
 bun add github:paltaio/pve-agent
