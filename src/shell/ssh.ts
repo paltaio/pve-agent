@@ -34,6 +34,13 @@ export interface SshOptions {
 	extraArgs?: readonly string[]
 	sshBinary?: string
 	scpBinary?: string
+	/**
+	 * Run scp in SFTP mode (`scp -s`), where the remote path is taken as
+	 * written. Off, scp's own default applies: OpenSSH 9.0 and later use SFTP
+	 * mode, earlier releases hand the remote path to root's shell on the node,
+	 * which expands globs, variables and substitutions in it.
+	 */
+	sftp?: boolean
 	/** Defaults to 120000. */
 	defaultTimeoutMs?: number
 	/** Replaced by tests. */
@@ -106,12 +113,18 @@ export class SshTransport implements ShellTransport {
 		return { stdout, stderr, exitCode: result.exitCode, durationMs: Date.now() - started }
 	}
 
-	/** Copy a local file onto the node with scp, replacing the remote path. */
+	/**
+	 * Copy a local file onto the node with scp, replacing the remote path.
+	 * Unless scp runs in SFTP mode, the remote shell expands the remote path.
+	 */
 	async upload(localPath: string, remotePath: string): Promise<void> {
 		await this.scp(localPath, `${this.destination}:${remotePath}`)
 	}
 
-	/** Copy a file off the node with scp, replacing the local path. */
+	/**
+	 * Copy a file off the node with scp, replacing the local path. Unless scp
+	 * runs in SFTP mode, the remote shell expands the remote path.
+	 */
 	async download(remotePath: string, localPath: string): Promise<void> {
 		await this.scp(`${this.destination}:${remotePath}`, localPath)
 	}
@@ -120,14 +133,27 @@ export class SshTransport implements ShellTransport {
 	async close(): Promise<void> {
 		if (this.options.controlPath === undefined) return
 		await this.spawnChecked(
-			[this.options.sshBinary ?? 'ssh', ...this.connectionArgs(), '-O', 'exit', this.destination],
+			[
+				this.options.sshBinary ?? 'ssh',
+				...this.connectionArgs(),
+				'-O',
+				'exit',
+				'--',
+				this.destination,
+			],
 			{ timeoutMs: 5000 },
 		).catch(() => undefined)
 	}
 
 	/** The ssh argument vector for a command line. */
 	argv(command: string): string[] {
-		return [this.options.sshBinary ?? 'ssh', ...this.connectionArgs(), this.destination, command]
+		return [
+			this.options.sshBinary ?? 'ssh',
+			...this.connectionArgs(),
+			'--',
+			this.destination,
+			command,
+		]
 	}
 
 	private connectionArgs(): string[] {
@@ -166,6 +192,7 @@ export class SshTransport implements ShellTransport {
 		// scp takes the port with a capital P.
 		const portIndex = args.indexOf('-p')
 		if (portIndex !== -1) args[portIndex] = '-P'
+		if (this.options.sftp === true) args.push('-s')
 		// The operands follow --, so a path that starts with a dash stays a path.
 		const argv = [this.options.scpBinary ?? 'scp', '-q', ...args, '--', source, destination]
 		const result = await this.spawnChecked(argv, { timeoutMs: this.defaultTimeoutMs })

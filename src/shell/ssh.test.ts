@@ -35,6 +35,7 @@ describe('argument vector', () => {
 			'StrictHostKeyChecking=accept-new',
 			'-o',
 			'ConnectTimeout=10',
+			'--',
 			'root@192.168.80.21',
 			'zpool status',
 		])
@@ -77,6 +78,7 @@ describe('argument vector', () => {
 			'-p',
 			'2222',
 			'-vv',
+			'--',
 			'admin@node',
 			'true',
 		])
@@ -217,6 +219,20 @@ describe('scp', () => {
 		])
 	})
 
+	test('sftp mode adds -s before the operands', async () => {
+		const log: SpawnRequest[] = []
+		const transport = new SshTransport({
+			host: 'node',
+			sftp: true,
+			spawn: fakeSpawn(() => ({}), log),
+		})
+		await transport.upload('/local/file', '/remote/$(id)')
+		const argv = log[0]?.argv ?? []
+		expect(argv.indexOf('-s')).toBeGreaterThan(0)
+		expect(argv.indexOf('-s')).toBeLessThan(argv.indexOf('--'))
+		expect(argv.slice(argv.indexOf('--') + 1)).toEqual(['/local/file', 'root@node:/remote/$(id)'])
+	})
+
 	test('a failed copy is a transport error with scp output', async () => {
 		const transport = new SshTransport({
 			host: 'node',
@@ -244,8 +260,7 @@ describe('close', () => {
 			spawn: fakeSpawn(() => ({}), log),
 		})
 		await transport.close()
-		expect(log[0]?.argv).toContain('-O')
-		expect(log[0]?.argv).toContain('exit')
+		expect(log[0]?.argv?.slice(-4)).toEqual(['-O', 'exit', '--', 'root@node'])
 	})
 })
 
