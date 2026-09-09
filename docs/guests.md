@@ -373,7 +373,7 @@ const vm = cluster.vm(100)
 const ct = cluster.container(110)
 
 const os = await vm.os // LinuxGuest, DarwinGuest or WindowsGuest
-const result = await os.run('systemctl is-active sshd') // { exitCode, stdout, stderr, timedOut }
+const result = await os.run('systemctl is-active sshd') // { exitCode, stdout, stderr, timedOut, truncated }
 console.log(result.exitCode, result.stdout)
 await os.output('uname -a') // trimmed stdout; throws GuestCommandError on a non-zero exit
 await os.sh('set -e\napt-get update\napt-get install -y curl', { timeoutMs: 600_000 })
@@ -389,7 +389,10 @@ with no shell between. A non-zero exit is a result on `run`, `sh` and `exec`;
 `output` and the file helpers throw `GuestCommandError` carrying `vmid`,
 `exitCode`, `stdout` and `stderr`. A command still running when the deadline
 passes comes back with `timedOut: true`, or throws `PveTimeoutError` from
-`output`. The deadline defaults to 30 seconds; `timeoutMs` changes it.
+`output`. The deadline defaults to 30 seconds; `timeoutMs` changes it. The
+guest agent stops a command's output at 16 MiB and the result says so with
+`truncated: true`; `readFile` and `readFileBytes` throw
+`GuestOutputTruncatedError` rather than return part of a file.
 
 - A VM goes through the QEMU guest agent. The VM needs `agent: '1'` in its
   config and `qemu-guest-agent` running inside. Without both, the node answers
@@ -448,7 +451,9 @@ if (os instanceof WindowsGuest) {
 
 All three carry `run`, `sh`, `exec`, `output`, `readFile`, `readFileBytes`,
 `writeFile`, `delete`, `exists`, `download`, `hostname`, `osInfo`, `reboot`
-and `shutdown`; files move as base64 so binary survives. The POSIX helpers add
+and `shutdown`; files move as base64 so binary survives, and `writeFile`
+takes any size, sending it in 48 KiB pieces on Linux and macOS and 8 KiB
+pieces on Windows, the later ones appending. The POSIX helpers add
 `sudo`, Linux adds `systemctl`, macOS adds `osascript` and `setClipboard`,
 Windows adds `cmd` and `powershell`. A Windows script goes over as
 `-EncodedCommand`, a UTF-16 base64 blob, so quotes, pipes and newlines arrive
@@ -476,7 +481,7 @@ await agent.fsfreezeThaw()
 await agent.fstrim()
 await agent.setUserPassword({ username: 'root', password: required('VM_PASSWORD') })
 const file = await agent.fileRead('/etc/hostname') // { content, truncated, bytesRead }
-await agent.fileWrite('/tmp/x', 'hello\n')
+await agent.fileWrite('/tmp/x', 'hello\n') // at most 46080 bytes per call
 const pid = await agent.startExec(['sleep', '30'])
 await agent.execStatus(pid)
 const result = await agent.exec(['systemctl', 'is-active', 'sshd']) // polls until it exits
@@ -486,7 +491,9 @@ await agent.output(['uname', '-a']) // throws GuestCommandError on a non-zero ex
 The agent takes an argv and runs no shell, so a pipeline needs an explicit
 `['sh', '-c', '...']`. `exec` returns `exitCode` and `signal` as the agent
 reports them, and `timedOut: true` with the pid when the deadline passes
-first.
+first. `fileWrite` carries at most 46080 bytes in one call, the endpoint's cap
+on base64 content, and throws `PveConfigError` for more; the endpoint has no
+append mode, so a larger file goes through `os.writeFile`.
 
 A container's counterpart to the agent's network query needs no agent:
 

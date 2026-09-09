@@ -175,6 +175,12 @@ The classes, their `kind` values and the fields each carries are listed once,
 in [ARCHITECTURE.md](../ARCHITECTURE.md#errors). The sections below show how
 to read the ones a script meets most.
 
+`PveConnectionError.url` and its message carry the path without the query
+string, where a GET or DELETE puts its parameters. `PveAuthError` is a 401:
+its message names the tier and quotes the response envelope. A ticket call
+that gets a 401 logs in again and is retried once; a 403 is
+`PvePermissionError` and is never retried.
+
 Waiting on a task and waiting on a state are different failures.
 `PveTaskError` belongs to a real worker task and names its UPID;
 `PveTimeoutError` is what `guest.waitFor`, `vm.waitForAgent`,
@@ -325,7 +331,10 @@ try {
 ```
 
 `run`, `sh` and `exec` return the exit code; `output` and the file helpers
-throw.
+throw. The guest agent stops a command's output at 16 MiB. `run`, `sh` and
+`exec` report the cut as `truncated: true`; `readFile` and `readFileBytes`
+throw `GuestOutputTruncatedError`, kind `guest-command` as well, rather than
+return part of a file.
 
 ### PveShellCommandError
 
@@ -345,8 +354,8 @@ try {
 }
 ```
 
-`shell.run` returns the exit code. `check: true` and `shell.output` throw. The other four shell classes are in
-[shell.md](shell.md).
+`shell.run` returns the exit code. `check: true` and `shell.output` throw. The
+other five shell classes are in [shell.md](shell.md).
 
 ## Tracing
 
@@ -372,7 +381,7 @@ would decide. See [shell.md](shell.md).
 ## Retries the library already does
 
 - A ticket in its last quarter hour is renewed before the call, and a 401
-  on a ticket call triggers a fresh login and a single retry.
+  on a ticket call triggers a fresh login and a single retry; a 403 is final.
 - A call whose tier decision says `ticket` while only a token is configured
   throws before sending anything.
 - The power calls and `delete` on a guest handle post their task again for up

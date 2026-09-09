@@ -157,7 +157,7 @@ await vm.waitForAgent() // after a boot, before the first agent call
 const r = await vm.guest.exec(['systemctl', 'is-active', 'sshd']) // { exitCode, signal, stdout, stderr, timedOut, pid }
 await vm.guest.output(['uname', '-a']) // trimmed stdout; throws on a non-zero exit
 await vm.guest.fileRead('/etc/hostname') // { content, truncated, bytesRead }
-await vm.guest.fileWrite('/etc/motd', 'hello\n')
+await vm.guest.fileWrite('/etc/motd', 'hello\n') // at most 46080 bytes; os.writeFile takes any size
 await vm.guest.ping() // throws when the agent is down; osInfo(), hostName(), networkInterfaces(), filesystems(), users() read the rest
 ```
 
@@ -169,7 +169,7 @@ agent to pick the helper.
 ```ts
 const os = await vm.os // LinuxGuest, DarwinGuest or WindowsGuest
 
-await os.run('ls /nonexistent') // { exitCode, stdout, stderr, timedOut }; returns on a non-zero exit
+await os.run('ls /nonexistent') // { exitCode, stdout, stderr, timedOut, truncated }; returns on a non-zero exit
 await os.output('hostname -f') // trimmed stdout; throws on a non-zero exit
 await os.sh('set -e\napt-get update\napt-get install -y curl', { timeoutMs: 600_000 })
 await os.readFile('/etc/os-release')
@@ -186,7 +186,9 @@ adds `cmd(line)` and `powershell(script)`, macOS adds `osascript(script)`.
 signal killed) and `timedOut: true` when the deadline passes with the process
 still running (30 seconds by default; `timeoutMs` changes it). `output` and
 the file helpers throw `GuestCommandError` on a non-zero exit, carrying `vmid`,
-`exitCode`, `stdout` and `stderr`, and `PveTimeoutError` on the deadline.
+`exitCode`, `stdout` and `stderr`, and `PveTimeoutError` on the deadline. The
+guest agent stops output at 16 MiB: `run` and `exec` report the cut as
+`truncated: true`, and `readFile` throws `GuestOutputTruncatedError`.
 
 ## The VNC console
 
@@ -289,8 +291,11 @@ await shell.pct.push(110, '/tmp/file', '/root/file', { perms: '0600' }) // pull,
 
 The shell refuses commands that match its destructive patterns (`rm -rf`,
 `zfs destroy`, `zpool destroy`, `wipefs`, `mkfs`, `dd of=`, `qm destroy`,
-`apt remove`, `reboot`, `poweroff`) with `PveShellPolicyError`. Allow them for
-a script with `pve.connect({ shell: { policy: { destructive: 'allow' } } })`.
+`apt remove`, `reboot`, `poweroff`) with `PveShellPolicyError`. It sees
+through `sudo`, `env`, `timeout` and the other wrappers, ignores quoting and
+flag order, and reads the body of `sh -c '...'`, and `input` handed to an
+interpreter, as command lines. Allow them for a script with
+`pve.connect({ shell: { policy: { destructive: 'allow' } } })`.
 
 ## Tasks and errors
 
@@ -305,8 +310,8 @@ Every error extends `PveError` and carries `kind`:
 | Class | Kind | When |
 | --- | --- | --- |
 | `PveConfigError` | `config` | a credential or a parameter value is missing or unusable, or the path is outside the registry |
-| `PveConnectionError` | `connection` | DNS, TCP, TLS or a request timeout; `url` |
-| `PveAuthError` | `auth` | the API rejected the credentials; `tier` |
+| `PveConnectionError` | `connection` | DNS, TCP, TLS or a request timeout; `url`, without its query string |
+| `PveAuthError` | `auth` | the API answered 401; `tier`, and the envelope message in `message` |
 | `PveTierError` | `tier` | the call needs a credential this client does not hold; `required`, `available` |
 | `PvePermissionError` | `permission` | 403 with accepted credentials; `method`, `path`, `tier` |
 | `PveNotFoundError` | `not-found` | 404, or a missing guest |
@@ -316,12 +321,15 @@ Every error extends `PveError` and carries `kind`:
 | `PvePropertyError` | `property` | a property string does not fit its format |
 | `PveConsoleError` | `console` | a console transport or protocol failure, or a refused login |
 | `GuestCommandError` | `guest-command` | a command inside a guest exited non-zero; `vmid`, `exitCode`, `stdout`, `stderr` |
+| `GuestOutputTruncatedError` | `guest-command` | the guest agent cut a file read short at its 16 MiB output cap; `vmid` |
 | `PveShellError` | `shell` | the root shell failed; `shell` names which way |
 
 `PveShellError` subclasses: `PveShellCredentialError`,
 `PveShellTransportError`, `PveShellPolicyError`, `PveShellCommandError`
-(`exitCode`, `stdout`, `stderr`) and `PveShellTimeoutError` (`timeoutMs`,
-`partialOutput`), the one timeout class that is not `PveTimeoutError`.
+(`exitCode`, `stdout`, `stderr`), `PveShellOutputError` (`output`, for
+`qm guest exec` output the helper cannot read) and `PveShellTimeoutError`
+(`timeoutMs`, `partialOutput`), the one timeout class that is not
+`PveTimeoutError`.
 
 ## What needs root@pam
 
@@ -343,8 +351,12 @@ PUT    /cluster/acme/account/{name}       DELETE /cluster/acme/account/{name}
 root@pam ticket.
 
 The same comparison gates parameters on endpoints a token otherwise reaches:
-`skiplock`, `lock`, `hookscript`, QEMU `args`, a `serial[n]` on a host
-device, raw `host=` in `usb[n]` and `hostpci[n]`, `migration_type`,
+`skiplock`, `lock`, `hookscript`, QEMU `args`, the QEMU options the config
+permission check has no privilege class for (`affinity`, `amd-sev`, `arch`,
+`hugepages`, `intel-tdx`, `ivshmem`, `keephugepages`, `parallel[n]`,
+`spice_enhancements`, `vmgenid`), a `delete` naming any of those, a
+`serial[n]` on a host device, raw `host=` in `usb[n]` and `hostpci[n]`,
+`migration_type`,
 `migration_network`, LXC bind and device `mp[n]` and `rootfs`, `dev[n]`, and
 `features` past `nesting`. The client throws `PveTierError` naming the
 parameter before sending when no root ticket is configured;

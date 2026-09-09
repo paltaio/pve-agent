@@ -74,7 +74,12 @@ the registry.
   root on the node. A value from outside goes through `shQuote`, `shJoin` or
   `shHeredoc` first; a bare number through `assertSafeInteger`; a name joined
   to a fixed directory through `assertPathSegment`. Each refuses with
-  `PveShellPolicyError`.
+  `PveShellPolicyError`; `shQuote` also refuses a value that is not a string.
+- The shell policy checks each command as the shell would hand it over:
+  quotes removed, wrappers such as `sudo`, `env` and `timeout` stepped over
+  to the program they run, and a `sh -c` body parsed as lines of its own.
+  `NodeShell.run` runs the same check over `input` when the command runs an
+  interpreter.
 
 ## How a call picks its credential
 
@@ -163,8 +168,8 @@ This table is the one home of the list; the docs link here.
 | Class | kind | Raised when |
 | --- | --- | --- |
 | `PveConfigError` | `config` | a credential or a parameter value is missing or unusable, or the path is outside the generated registry |
-| `PveConnectionError` | `connection` | DNS, TCP, TLS or a timeout; carries `url` |
-| `PveAuthError` | `auth` | the API rejected the credentials; carries the `tier` that failed |
+| `PveConnectionError` | `connection` | DNS, TCP, TLS or a timeout; carries `url` without its query string, where a GET or DELETE puts its parameters |
+| `PveAuthError` | `auth` | the API answered 401; carries the `tier` that failed, and its message quotes the response envelope |
 | `PveTierError` | `tier` | the call needs a credential this client does not hold; `required`, `available` |
 | `PvePermissionError` | `permission` | 403 with credentials that were accepted; `method`, `path`, `tier` |
 | `PveNotFoundError` | `not-found` | 404, 501, or the 500 PVE sends when a guest or config file is missing; `method`, `path` |
@@ -174,6 +179,7 @@ This table is the one home of the list; the docs link here.
 | `PvePropertyError` | `property` | a property string does not fit its format |
 | `PveConsoleError` | `console` | a console transport or protocol failure, or a refused login |
 | `GuestCommandError` | `guest-command` | a command run inside a guest exited non-zero; `vmid`, `exitCode`, `stdout`, `stderr` |
+| `GuestOutputTruncatedError` | `guest-command` | the guest agent cut a command's output at its 16 MiB cap, so a file read is incomplete; `vmid` |
 | `PveShellError` | `shell` | the root-shell layer failed; `shell` says which way |
 
 `src/shell/errors.ts` narrows the shell case. Every one carries `kind: 'shell'`
@@ -185,6 +191,7 @@ and a `shell` field naming the failure:
 | `PveShellTransportError` | `transport` | the transport did not connect, dropped mid-command, or a termproxy size limit was passed; `node`, `transport` |
 | `PveShellPolicyError` | `policy` | the policy refused the command, or a value failed a quoting check; `command`, `reason` |
 | `PveShellCommandError` | `command` | a command exited non-zero and the caller asked for the code to be checked; `exitCode`, `stdout`, `stderr` |
+| `PveShellOutputError` | `output` | a command ran but printed something the helper cannot read, such as `qm guest exec` output that is not JSON; `output` |
 | `PveShellTimeoutError` | `timeout` | a command produced no result before its deadline; `timeoutMs`, `partialOutput` |
 
 Two rules keep the classes apart. `PveTaskError.upid` is always a real UPID,
@@ -213,7 +220,9 @@ serial consoles. The store's contract:
 - one open per key is in flight at a time, so concurrent callers share a
   handshake;
 - a failed open leaves no entry behind, so the next call tries again;
-- a session that closes underneath forgets its own entry;
+- a session that closes underneath forgets its own entry, and a node shell
+  does the same when its transport fails to carry a command
+  (`NodeShell.onClose`), so the next `node.shell` opens a fresh one;
 - `close()` drains every store, closes every session, then releases the
   client, and is safe to call twice.
 

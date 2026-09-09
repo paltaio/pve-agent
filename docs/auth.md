@@ -93,6 +93,8 @@ in handler code, and several depend on the value rather than the name:
 | `lock` | qemu create and config | always |
 | `hookscript` | qemu and lxc create and config | always |
 | `args` | qemu create and config | always |
+| `affinity`, `amd-sev`, `arch`, `hugepages`, `intel-tdx`, `ivshmem`, `keephugepages`, `parallel[n]`, `spice_enhancements`, `vmgenid` | qemu create and config | always; the config permission check has no privilege class for them |
+| `delete` | qemu config | the list names one of the options above, or `args`, `lock` or `hookscript` |
 | `serial[n]` | qemu create and config | the value is not `socket`, so a real host device |
 | `usb[n]` | qemu create and config | a raw `host=` rather than `mapping=`, unless the host is `spice` |
 | `hostpci[n]` | qemu create and config | a raw `host=` rather than `mapping=`, or any `romfile=` |
@@ -208,7 +210,9 @@ A ticket lasts two hours and renews by sending the old ticket back as the
 password, so a long-running script never re-sends the password. Ticket calls
 attach `CSRFPreventionToken` on writes; token calls never do. A 401 on a
 ticket call, which is what the API server answers for a ticket it no longer
-verifies, triggers a fresh login and a single retry; a 403 is final.
+verifies, triggers a fresh login and a single retry; a 403 is final. A 401
+that survives the retry is `PveAuthError`, carrying the tier and the
+envelope's message; a 403 is `PvePermissionError`.
 
 ```ts
 import pve from 'pve-agent'

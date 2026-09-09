@@ -313,9 +313,11 @@ The node-level shell, `POST /nodes/{node}/termproxy`, is gated on a
 
 ## Sessions
 
-Sessions are keyed by vmid and shared, so two handles for the same guest
-reuse one socket, and concurrent callers share one handshake. A failed open
-leaves nothing behind, so the next call tries again.
+Sessions are keyed by vmid, node shells by node name, and both are shared:
+two handles for the same guest reuse one socket, and concurrent callers share
+one handshake. A failed open leaves nothing behind. A session that closes
+underneath, or a shell whose transport fails to carry a command, drops its own
+entry, so the next call opens a fresh one.
 
 ```ts
 import pve from 'pve-agent'
@@ -328,4 +330,6 @@ await vm.console.close() // the serial console
 await vm.closeSessions() // both, leaving the guest running
 await cluster.closeVncSession(100)
 await cluster.closeSerialConsole(100)
+await cluster.node('pve1').closeShell() // the node shell
+await cluster.closeNodeShell('pve1')
 ```

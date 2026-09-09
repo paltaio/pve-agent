@@ -17,7 +17,11 @@ await shell.output('pveversion -v')
 
 The shell opens on the first `await` and is shared from then on, per node and
 per cluster. `cluster.close()` closes every one. A failed open is not cached,
-so the next call tries again.
+so the next call tries again. A shell whose transport fails to carry a command
+is dropped the same way, and the next `node.shell` opens a fresh one.
+`node.closeShell()` and `cluster.closeNodeShell(node)` close the shared shell
+on purpose; `shell.onClose(listener)` runs the listener once, when the shell
+is closed or its transport fails.
 
 ## Transports
 
@@ -27,7 +31,7 @@ so the next call tries again.
 | Exit codes | The command's own | Parsed out of markers the transport wraps the command in |
 | Streams | stdout and stderr separate | stderr goes through a temporary file on the node |
 | Binary | Safe in both directions | Base64 through the pty |
-| Transfer | `scp` | Base64 in 1024-character pieces, capped at 1 MiB |
+| Transfer | `scp`, in SFTP mode with `ssh.sftp: true` | Base64 in 1024-character pieces, capped at 1 MiB |
 | Command line | Any length | 4096 bytes after wrapping |
 
 `transport: 'auto'`, the default, probes SSH first and falls back to termproxy
@@ -61,6 +65,7 @@ await using cluster = await pve.connect({
 			controlPersistSeconds: 60,
 			connectTimeoutSeconds: 10,
 			defaultTimeoutMs: 120_000,
+			sftp: true, // scp in SFTP mode
 		},
 		policy: { destructive: 'refuse' },
 	},
@@ -114,9 +119,11 @@ await shell.run(shJoin(['zfs', 'get', 'compression', dataset]))
 await shell.run(`cat > /etc/motd ${shHeredoc('welcome\n')}`)
 ```
 
-`shQuote` refuses a value containing a NUL byte, because `execve` stops there
-and the node would act on the truncated value. A leading dash survives
-quoting, so an operand built from a value still needs a `--` in front of it.
+`shQuote` takes a string and refuses anything else, since a number or an
+object would reach the shell unquoted. It also refuses a value containing a
+NUL byte, because `execve` stops there and the node would act on the
+truncated value. A leading dash survives quoting, so an operand built from a
+value still needs a `--` in front of it.
 `shHeredoc` carries content verbatim, with a terminator no line of the
 content equals.
 
@@ -143,6 +150,11 @@ await shell.download('/var/log/syslog', './syslog')
 Both replace the target. Over SSH they run `scp`; over termproxy the bytes go
 through the pty as base64, with the upload decoded into a temporary file next
 to the target and renamed over it. The policy does not see either.
+
+With `ssh: { sftp: true }`, scp runs in SFTP mode and takes the remote path as
+written. Otherwise scp's own default applies: OpenSSH 9.0 and later use SFTP
+mode, and earlier releases hand the remote path to root's shell on the node,
+which expands globs, variables and substitutions in it.
 
 ## The policy
 
@@ -174,12 +186,23 @@ await using cluster = await pve.connect({
   removal, LUKS format and key changes, `mdadm` array changes, `qm destroy`
   and `pct destroy`, `pvecm delnode`, `apt remove`, `purge` and `autoremove`,
   `dpkg --purge`, `reboot`, `poweroff`, `halt` and `shutdown` in command
-  position, the `systemctl` power verbs, a redirect onto a block device,
-  `mkswap`, `swapoff` and `pvesm free`. `destructive: 'allow'` lets them
-  through.
+  position, `init 0`, `init 6` and `telinit` the same, the `systemctl` power
+  verbs and `systemctl start` or `isolate` of a power target, a write to
+  `/proc/sysrq-trigger`, a redirect onto a block device, a zvol or a
+  `/dev/disk/by-*` path, `mkswap`, `swapoff` and `pvesm free`.
+  `destructive: 'allow'` lets them through.
 - `allow`, when set, refuses any command no pattern matches, and refuses a
   line holding a command substitution or a process substitution outright,
   since those run programs the check cannot see.
+
+The check reads each command as the shell would hand it to the program:
+quotes group and vanish, a wrapper in front (`sudo`, `doas`, `env`, `exec`,
+`command`, `nohup`, `nice`, `ionice`, `timeout`, `busybox`, `xargs`) is
+stepped over to the program it runs, and the body of `sh -c '...'` is parsed
+as command lines of its own. So `sudo rm -rf /`, `rm '-rf' /`, `rm / -rf` and
+`sh -c 'rm -rf /'` are all refused. When `run` gets `input` and the command
+runs an interpreter (`sh`, `bash`, `xargs`, `python`, `perl` and the like),
+the policy reads the input as command lines too.
 
 A refusal throws `PveShellPolicyError` before anything is spawned, carrying
 `command` and `reason`. The helpers go through the same check, so
@@ -424,6 +447,7 @@ field says which failure it was.
 | `PveShellTransportError` | `transport` | The transport could not open, died mid-session, or a termproxy limit was passed |
 | `PveShellPolicyError` | `policy` | The policy refused the command, or a value failed a quoting check |
 | `PveShellCommandError` | `command` | The command ran and exited non-zero, with `check` set |
+| `PveShellOutputError` | `output` | The command ran but printed something the helper cannot read, such as `qm guest exec` output that is not JSON; `output` |
 | `PveShellTimeoutError` | `timeout` | No result before the deadline; `partialOutput` holds what arrived |
 
 ## Opening a shell without a cluster

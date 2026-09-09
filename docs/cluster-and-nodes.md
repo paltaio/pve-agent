@@ -268,7 +268,9 @@ for (const rule of await ha.listRules({ type: 'node-affinity' })) {
 ```
 
 `HaRuleCreateParams` is a union keyed on `type`, so setting `type` narrows the
-rest of the parameters, and `HaRule` narrows the same way on read.
+rest of the parameters, and `HaRule` narrows the same way on read. A rule of a
+type the library does not model comes back as `HaOtherRule`, `type: 'other'`,
+with the manager's type in `ruleType` and every field in `raw`.
 
 ## Corosync membership
 
