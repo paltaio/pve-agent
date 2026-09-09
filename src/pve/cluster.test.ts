@@ -3,26 +3,22 @@ import { PveAuthError, PveConfigError, PveNotFoundError } from '../core/errors.t
 import { closeMockClients, formFields, mockClient } from '../core/test-support/api-mock.ts'
 import type { GuestRef } from '../guest/types.ts'
 import { PveShellCredentialError, PveShellTransportError } from '../shell/errors.ts'
-import { connect, PveCluster, type PveClusterOptions } from './cluster.ts'
+import { connect, PveCluster } from './cluster.ts'
 import { PveContainer, PveVm } from './guest.ts'
-import { fakeSockets, fakeSsh } from './test-support.ts'
+import {
+	clusterFixture,
+	DONE,
+	fakeSockets,
+	fakeSsh,
+	TERM_PROXY,
+	UPID,
+	VNC_PROXY,
+} from './test-support.ts'
 
 afterEach(closeMockClients)
-
-const UPID = 'UPID:ms01-0160:0007A1F2:0121C6B4:65F4A0E2:qmstart:9000:agents@pve!ci:'
-const DONE = { status: 'stopped', exitstatus: 'OK' }
-const VNC_PROXY = { port: '5900', ticket: 'VNCTICKET', user: 'root@pam', password: 'pw' }
-const TERM_PROXY = { port: '6001', ticket: 'TERMTICKET', user: 'root@pam' }
 const VM_9000: Required<GuestRef> = { type: 'qemu', node: 'ms01-0160', vmid: 9000 }
 
 /** A cluster over the recording client, with an optional default node so `node()` resolves. */
-function fixture(options: { node?: string } & PveClusterOptions = {}) {
-	const mock = mockClient()
-	const { node, ...clusterOptions } = options
-	if (node !== undefined) mock.client.auth.connection.node = node
-	return { ...mock, cluster: new PveCluster(mock.client, clusterOptions) }
-}
-
 /** Credentials that point `connect` at a mock server instead of the environment. */
 function credentialsFor(baseUrl: string) {
 	const url = new URL(baseUrl)
@@ -53,27 +49,27 @@ describe('connecting', () => {
 	})
 
 	test('version reads GET /version', async () => {
-		const { cluster, reply, last } = fixture()
+		const { cluster, reply, last } = clusterFixture()
 		reply({ data: { version: '9.2.11', release: '9.2', repoid: 'f6997e698c79' } })
 		expect((await cluster.version()).version).toBe('9.2.11')
 		expect(last().path).toBe('/version')
 	})
 
 	test('nodes reads GET /nodes', async () => {
-		const { cluster, reply, last } = fixture()
+		const { cluster, reply, last } = clusterFixture()
 		reply({ data: [{ node: 'ms01-0160', status: 'online' }] })
 		expect((await cluster.nodes()).map((entry) => entry.node)).toEqual(['ms01-0160'])
 		expect(last().path).toBe('/nodes')
 	})
 
 	test('node falls back to the configured default', () => {
-		const { cluster } = fixture({ node: 'ms01-0160' })
+		const { cluster } = clusterFixture({ node: 'ms01-0160' })
 		expect(cluster.node().name).toBe('ms01-0160')
 		expect(cluster.node('ms02-0066').name).toBe('ms02-0066')
 	})
 
 	test('node without a name or a default names the variable to set', () => {
-		const { cluster } = fixture()
+		const { cluster } = clusterFixture()
 		expect(() => cluster.node()).toThrow(PveConfigError)
 		expect(() => cluster.node()).toThrow(/PVE_NODE/)
 	})
@@ -81,7 +77,7 @@ describe('connecting', () => {
 
 describe('guest handles', () => {
 	test('vm and container build without sending anything', () => {
-		const { cluster, requests } = fixture({ node: 'ms01-0160' })
+		const { cluster, requests } = clusterFixture({ node: 'ms01-0160' })
 		const vm = cluster.vm(9000)
 		const ct = cluster.container(9001, 'ms02-0066')
 		expect(vm).toBeInstanceOf(PveVm)
@@ -94,7 +90,7 @@ describe('guest handles', () => {
 	})
 
 	test('guest resolves the node and the type from the cluster', async () => {
-		const { cluster, reply, last } = fixture()
+		const { cluster, reply, last } = clusterFixture()
 		reply({ data: [{ type: 'lxc', node: 'ms02-0078', vmid: 110, status: 'running' }] })
 		const guest = await cluster.guest(110)
 		expect(guest).toBeInstanceOf(PveContainer)
@@ -104,7 +100,7 @@ describe('guest handles', () => {
 	})
 
 	test('a vmid no node holds is an error, not an empty handle', async () => {
-		const { cluster, reply } = fixture()
+		const { cluster, reply } = clusterFixture()
 		reply({ data: [] })
 		reply({ data: [] })
 		await expect(cluster.guest(9042)).rejects.toBeInstanceOf(PveNotFoundError)
@@ -112,7 +108,7 @@ describe('guest handles', () => {
 	})
 
 	test('list filters the cluster resources', async () => {
-		const { cluster, reply } = fixture()
+		const { cluster, reply } = clusterFixture()
 		reply({
 			data: [
 				{ type: 'qemu', node: 'ms01-0160', vmid: 101, status: 'running' },
@@ -125,14 +121,14 @@ describe('guest handles', () => {
 	})
 
 	test('nextId reads the lowest free vmid', async () => {
-		const { cluster, reply, last } = fixture()
+		const { cluster, reply, last } = clusterFixture()
 		reply({ data: '9000' })
 		expect(await cluster.nextId()).toBe(9000)
 		expect(last().path.startsWith('/cluster/nextid')).toBe(true)
 	})
 
 	test('waitForTask polls the task and returns its final status', async () => {
-		const { cluster, reply, requests } = fixture()
+		const { cluster, reply, requests } = clusterFixture()
 		reply({ data: { status: 'running' } })
 		reply({ data: { ...DONE, upid: UPID } })
 		const status = await cluster.waitForTask(UPID, { initialDelayMs: 1 })
@@ -143,7 +139,7 @@ describe('guest handles', () => {
 
 describe('creating guests', () => {
 	test('createVm claims the next free vmid, sends no node key and waits', async () => {
-		const { cluster, reply, requests } = fixture()
+		const { cluster, reply, requests } = clusterFixture()
 		reply({ data: '9000' })
 		reply({ data: UPID })
 		reply({ data: DONE })
@@ -168,7 +164,7 @@ describe('creating guests', () => {
 	})
 
 	test('createVm keeps an explicit vmid and defaults the node', async () => {
-		const { cluster, reply, requests } = fixture({ node: 'ms01-0160' })
+		const { cluster, reply, requests } = clusterFixture({ node: 'ms01-0160' })
 		reply({ data: UPID })
 		reply({ data: DONE })
 		const vm = await cluster.createVm({ vmid: 9005, memory: '512' })
@@ -177,7 +173,7 @@ describe('creating guests', () => {
 	})
 
 	test('createContainer sends unprivileged unless the spec sets it', async () => {
-		const { cluster, reply, requests } = fixture({ node: 'ms01-0160' })
+		const { cluster, reply, requests } = clusterFixture({ node: 'ms01-0160' })
 		reply({ data: UPID })
 		reply({ data: DONE })
 		const ct = await cluster.createContainer({
@@ -206,7 +202,7 @@ describe('creating guests', () => {
 describe('sessions', () => {
 	test('a node shell opens once per node and is shared', async () => {
 		const ssh = fakeSsh({ hostname: { stdout: 'ms01-0160\n' } })
-		const { cluster } = fixture({ shell: { ssh: { spawn: ssh.spawn } } })
+		const { cluster } = clusterFixture({ shell: { ssh: { spawn: ssh.spawn } } })
 		const [first, second] = await Promise.all([
 			cluster.nodeShell('ms01-0160'),
 			cluster.nodeShell('ms01-0160'),
@@ -219,7 +215,7 @@ describe('sessions', () => {
 
 	test('a closed shell is dropped, and closeNodeShell closes the one that is open', async () => {
 		const ssh = fakeSsh({ hostname: { stdout: 'ms01-0160\n' } })
-		const { cluster } = fixture({ shell: { ssh: { spawn: ssh.spawn } } })
+		const { cluster } = clusterFixture({ shell: { ssh: { spawn: ssh.spawn } } })
 		const first = await cluster.nodeShell('ms01-0160')
 		await first.close()
 		const second = await cluster.nodeShell('ms01-0160')
@@ -239,7 +235,7 @@ describe('sessions', () => {
 					: { stdout: 'ms01-0160\n' }
 			},
 		})
-		const { cluster } = fixture({ shell: { ssh: { spawn: ssh.spawn } } })
+		const { cluster } = clusterFixture({ shell: { ssh: { spawn: ssh.spawn } } })
 		const first = await cluster.nodeShell('ms01-0160')
 		await expect(first.output('hostname')).rejects.toBeInstanceOf(PveShellTransportError)
 		const second = await cluster.nodeShell('ms01-0160')
@@ -251,7 +247,7 @@ describe('sessions', () => {
 		const ssh = fakeSsh({
 			true: { exitCode: 255, stderr: 'root@ms01-0160: Permission denied (publickey).' },
 		})
-		const { cluster } = fixture({ shell: { ssh: { spawn: ssh.spawn }, transport: 'ssh' } })
+		const { cluster } = clusterFixture({ shell: { ssh: { spawn: ssh.spawn }, transport: 'ssh' } })
 		await expect(cluster.nodeShell('ms01-0160')).rejects.toBeInstanceOf(PveShellCredentialError)
 		await expect(cluster.nodeShell('ms01-0160')).rejects.toBeInstanceOf(PveShellCredentialError)
 		expect(ssh.commands).toHaveLength(2)
@@ -259,7 +255,7 @@ describe('sessions', () => {
 
 	test('a VNC session opens once per vmid and is forgotten when the socket drops', async () => {
 		const sockets = fakeSockets()
-		const { cluster, reply, calls } = fixture({ socketFactory: sockets.factory })
+		const { cluster, reply, calls } = clusterFixture({ socketFactory: sockets.factory })
 		reply({ data: VNC_PROXY })
 		const [first, second] = await Promise.all([
 			cluster.vncSession(VM_9000),
@@ -282,7 +278,7 @@ describe('sessions', () => {
 
 	test('a serial console opens once per vmid and asks termproxy for the serial port', async () => {
 		const sockets = fakeSockets()
-		const { cluster, reply, calls } = fixture({ socketFactory: sockets.factory })
+		const { cluster, reply, calls } = clusterFixture({ socketFactory: sockets.factory })
 		reply({ data: TERM_PROXY })
 		const [first, second] = await Promise.all([
 			cluster.serialConsole(VM_9000, { cols: 40, rows: 6 }),
@@ -319,7 +315,7 @@ describe('disposal', () => {
 	test('close tears down every session and shell, and is safe to repeat', async () => {
 		const sockets = fakeSockets()
 		const ssh = fakeSsh()
-		const { cluster, reply } = fixture({
+		const { cluster, reply } = clusterFixture({
 			socketFactory: sockets.factory,
 			shell: { ssh: { spawn: ssh.spawn, controlPath: '/tmp/pve-agent-test.sock' } },
 		})
@@ -340,7 +336,7 @@ describe('disposal', () => {
 
 	test('close waits for a session still opening and closes it too', async () => {
 		const sockets = fakeSockets()
-		const { cluster, reply } = fixture({ socketFactory: sockets.factory })
+		const { cluster, reply } = clusterFixture({ socketFactory: sockets.factory })
 		reply({ data: VNC_PROXY, delayMs: 20 })
 		const opening = cluster.vncSession(VM_9000)
 		await cluster.close()
@@ -350,7 +346,7 @@ describe('disposal', () => {
 
 	test('await using closes the cluster at the end of the block', async () => {
 		const sockets = fakeSockets()
-		const outer = fixture({ socketFactory: sockets.factory })
+		const outer = clusterFixture({ socketFactory: sockets.factory })
 		outer.reply({ data: VNC_PROXY })
 		{
 			await using cluster = outer.cluster

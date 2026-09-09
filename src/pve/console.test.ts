@@ -1,24 +1,14 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { charToKeysym } from '../console/rfb.ts'
-import { closeMockClients, formFields, mockClient } from '../core/test-support/api-mock.ts'
-import { PveCluster } from './cluster.ts'
-import { fakeSockets, type FakeSocketOptions } from './test-support.ts'
+import { closeMockClients, formFields } from '../core/test-support/api-mock.ts'
+import { clusterFixture, TERM_PROXY, VNC_PROXY, type FakeSocketOptions } from './test-support.ts'
 
 afterEach(closeMockClients)
 
-const VNC_PROXY = { port: '5900', ticket: 'VNCTICKET', user: 'root@pam', password: 'pw' }
-const TERM_PROXY = { port: '6001', ticket: 'TERMTICKET', user: 'root@pam' }
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
 function fixture(sockets: FakeSocketOptions = {}) {
-	const mock = mockClient()
-	mock.client.auth.connection.node = 'ms01-0160'
-	const fakes = fakeSockets(sockets)
-	return {
-		...mock,
-		...fakes,
-		cluster: new PveCluster(mock.client, { socketFactory: fakes.factory }),
-	}
+	return clusterFixture({ node: 'ms01-0160', sockets })
 }
 
 describe('the kvm handle', () => {

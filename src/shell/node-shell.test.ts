@@ -3,19 +3,14 @@ import { closeMockClients, mockClient } from '../core/test-support/api-mock.ts'
 import { PveShellCommandError, PveShellCredentialError, PveShellPolicyError } from './errors.ts'
 import { NodeShell } from './node-shell.ts'
 import type { SpawnFn } from './spawn.ts'
-import { FakePty, FakeTransport } from './test-support.ts'
+import { FakePty, fakeSpawn, FakeTransport } from './test-support.ts'
 
 afterEach(closeMockClients)
 
 const encoder = new TextEncoder()
 
 function sshAnswering(exitCode: number, stderr = ''): SpawnFn {
-	return async () => ({
-		exitCode,
-		stdout: new Uint8Array(0),
-		stderr: encoder.encode(stderr),
-		timedOut: false,
-	})
+	return fakeSpawn(() => ({ exitCode, stderr: encoder.encode(stderr) }))
 }
 
 const sshRefused = sshAnswering(255, 'root@ms01-0160: Permission denied (publickey).')

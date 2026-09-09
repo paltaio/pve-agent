@@ -4,7 +4,28 @@
  */
 
 import type { ConsoleSocket } from '../console/socket.ts'
+import type { SpawnFn, SpawnRequest, SpawnResult } from './spawn.ts'
 import type { CommandResult, RunOptions, ShellTransport } from './types.ts'
+
+/**
+ * A process spawner answered by `handler`, with exit 0 and no output for
+ * anything it leaves out. Every request is appended to `log`.
+ */
+export function fakeSpawn(
+	handler: (request: SpawnRequest) => Partial<SpawnResult>,
+	log?: SpawnRequest[],
+): SpawnFn {
+	return async (request) => {
+		log?.push(request)
+		const result = handler(request)
+		return {
+			exitCode: result.exitCode ?? 0,
+			stdout: result.stdout ?? new Uint8Array(0),
+			stderr: result.stderr ?? new Uint8Array(0),
+			timedOut: result.timedOut ?? false,
+		}
+	}
+}
 
 export interface FakeReply {
 	exitCode?: number
@@ -69,6 +90,8 @@ export type PtyReply = FakeReply | 'hang' | undefined
 export interface FakePtyOptions {
 	/** Answers a decoded command. The probe is answered by the pty itself; undefined stands for no output. */
 	reply?: (command: string, input: string | undefined) => PtyReply
+	/** Answers a decoded command with bytes printed as they are, given the session marker. */
+	rawReply?: (command: string, marker: string) => string | undefined
 	/** Answers a line as typed, before any wrapper parsing. What it returns is printed. */
 	onLine?: (line: string) => string | undefined
 	/** Text the shell prints once logged in. One ending in `login:` swallows every line typed at it. */
@@ -193,6 +216,12 @@ export class FakePty implements ConsoleSocket {
 		this.commands.push(command)
 		this.inputs.push(input)
 
+		const raw =
+			command === 'printf ready' ? undefined : this.options.rawReply?.(command, this.marker)
+		if (raw !== undefined) {
+			this.emit(raw)
+			return
+		}
 		const reply =
 			command === 'printf ready' ? { stdout: 'ready' } : this.options.reply?.(command, input)
 		if (reply === 'hang') return

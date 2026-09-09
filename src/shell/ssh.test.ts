@@ -1,26 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import { PveShellCommandError, PveShellTimeoutError, PveShellTransportError } from './errors.ts'
-import type { SpawnFn, SpawnRequest, SpawnResult } from './spawn.ts'
+import type { SpawnRequest } from './spawn.ts'
 import { probeSsh, SshTransport } from './ssh.ts'
+import { fakeSpawn } from './test-support.ts'
 
 const encoder = new TextEncoder()
 const decode = (bytes: Uint8Array | undefined): string => new TextDecoder().decode(bytes)
-
-function fakeSpawn(
-	handler: (request: SpawnRequest) => Partial<SpawnResult>,
-	log?: SpawnRequest[],
-): SpawnFn {
-	return async (request) => {
-		log?.push(request)
-		const result = handler(request)
-		return {
-			exitCode: result.exitCode ?? 0,
-			stdout: result.stdout ?? new Uint8Array(0),
-			stderr: result.stderr ?? new Uint8Array(0),
-			timedOut: result.timedOut ?? false,
-		}
-	}
-}
 
 describe('argument vector', () => {
 	test('carries batch mode, the host key policy, the connect timeout and the command', () => {

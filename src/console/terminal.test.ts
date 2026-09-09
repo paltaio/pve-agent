@@ -1,12 +1,14 @@
-import { describe, expect, test } from 'bun:test'
-import type { PveClient } from '../core/client.ts'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { PveConfigError, PveConsoleError, PveTimeoutError } from '../core/errors.ts'
+import { closeMockClients, formObject, mockClient } from '../core/test-support/api-mock.ts'
 import { FakePty, type FakePtyOptions } from '../shell/test-support.ts'
 import { keySequence, SerialConsole, type SerialConsoleOptions } from './terminal.ts'
 
+afterEach(closeMockClients)
+
 function newConsole(options: Partial<SerialConsoleOptions> = {}): SerialConsole {
 	return new SerialConsole({
-		client: undefined as unknown as PveClient,
+		client: mockClient().client,
 		node: 'ms02-0078',
 		vmid: 101,
 		cols: 40,
@@ -102,24 +104,15 @@ describe('the handshake', () => {
 })
 
 describe('connect', () => {
-	function stubClient(posts: { path: string; params: unknown }[]): PveClient {
-		return {
-			baseUrl: 'https://192.168.80.21:8006',
-			auth: { has: () => false, tokenHeader: () => 'PVEAPIToken=x' },
-			http: { verifySsl: false },
-			post: async (path: string, params: unknown) => {
-				posts.push({ path, params })
-				return { port: 5900, ticket: 'TICKET', user: 'root@pam' }
-			},
-		} as unknown as PveClient
-	}
+	const PROXY = { port: 5900, ticket: 'TICKET', user: 'root@pam' }
 
 	test('asks for the serial port of a VM and logs in with the ticket', async () => {
-		const posts: { path: string; params: unknown }[] = []
+		const mock = mockClient({ ticket: false })
+		mock.reply({ data: PROXY })
 		const opened: { url: string; headers: Record<string, string> }[] = []
 		const socket = new FakePty()
 		const serial = newConsole({
-			client: stubClient(posts),
+			client: mock.client,
 			serial: 'serial1',
 			socketFactory: (url, options) => {
 				opened.push({ url, headers: options.headers })
@@ -127,34 +120,37 @@ describe('connect', () => {
 			},
 		})
 		await serial.connect()
-		expect(posts).toEqual([
-			{ path: '/nodes/ms02-0078/qemu/101/termproxy', params: { serial: 'serial1' } },
-		])
+		expect(mock.last().path).toBe('/nodes/ms02-0078/qemu/101/termproxy')
+		expect(formObject(mock.last())).toEqual({ serial: 'serial1' })
 		expect(opened[0]?.url).toBe(
-			'wss://192.168.80.21:8006/api2/json/nodes/ms02-0078/qemu/101/vncwebsocket?port=5900&vncticket=TICKET',
+			`${mock.client.baseUrl.replace('https://', 'wss://')}/api2/json/nodes/ms02-0078/qemu/101/vncwebsocket?port=5900&vncticket=TICKET`,
 		)
-		expect(opened[0]?.headers).toEqual({ Authorization: 'PVEAPIToken=x' })
+		expect(opened[0]?.headers).toEqual({ Authorization: mock.client.auth.tokenHeader() })
 		expect(socket.sent[0]).toBe('root@pam:TICKET\n')
 		serial.close()
 	})
 
 	test('a container is asked for its one console', async () => {
-		const posts: { path: string; params: unknown }[] = []
+		const mock = mockClient()
+		mock.reply({ data: PROXY })
 		const serial = newConsole({
-			client: stubClient(posts),
+			client: mock.client,
 			type: 'lxc',
 			vmid: 110,
 			socketFactory: () => new FakePty(),
 		})
 		await serial.connect()
-		expect(posts).toEqual([{ path: '/nodes/ms02-0078/lxc/110/termproxy', params: {} }])
+		expect(mock.last().path).toBe('/nodes/ms02-0078/lxc/110/termproxy')
+		expect(mock.last().body).toBe('')
 		serial.close()
 	})
 
 	test('closes the socket it opened when the handshake fails', async () => {
+		const mock = mockClient()
+		mock.reply({ data: PROXY })
 		const socket = new FakePty({ answerAuth: false })
 		const serial = newConsole({
-			client: stubClient([]),
+			client: mock.client,
 			connectTimeoutMs: 20,
 			socketFactory: () => socket,
 		})

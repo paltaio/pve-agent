@@ -1,22 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { PveApiError, PveTaskError } from '../core/errors.ts'
-import { closeMockClients, formFields, mockClient } from '../core/test-support/api-mock.ts'
-import { PveCluster, type PveClusterOptions } from './cluster.ts'
-import { fakeSockets, fakeSsh } from './test-support.ts'
+import { closeMockClients, formFields } from '../core/test-support/api-mock.ts'
+import { clusterFixture, DONE, fakeSsh, UPID, VNC_PROXY } from './test-support.ts'
 
 afterEach(closeMockClients)
 
-const UPID = 'UPID:ms01-0160:0007A1F2:0121C6B4:65F4A0E2:qmstart:9000:agents@pve!ci:'
-const DONE = { status: 'stopped', exitstatus: 'OK' }
-const VNC_PROXY = { port: '5900', ticket: 'VNCTICKET', user: 'root@pam', password: 'pw' }
 const VM = '/nodes/ms01-0160/qemu/9000'
 const CT = '/nodes/ms02-0078/lxc/110'
-
-function fixture(options: PveClusterOptions = {}) {
-	const mock = mockClient()
-	mock.client.auth.connection.node = 'ms01-0160'
-	return { ...mock, cluster: new PveCluster(mock.client, options) }
-}
 
 /** Queues a UPID and a finished task status, the pair every lifecycle call reads. */
 function taskDone(reply: (reply: { data: unknown }) => void): void {
@@ -26,7 +16,7 @@ function taskDone(reply: (reply: { data: unknown }) => void): void {
 
 describe('lifecycle calls wait for the task', () => {
 	test('start posts and returns the finished status', async () => {
-		const { cluster, reply, requests } = fixture()
+		const { cluster, reply, requests } = clusterFixture({ node: 'ms01-0160' })
 		taskDone(reply)
 		const status = await cluster.vm(9000).start()
 		expect(status.exitStatus).toBe('OK')
@@ -36,7 +26,7 @@ describe('lifecycle calls wait for the task', () => {
 	})
 
 	test('a failed task throws with its exit status', async () => {
-		const { cluster, reply } = fixture()
+		const { cluster, reply } = clusterFixture({ node: 'ms01-0160' })
 		reply({ data: UPID })
 		reply({ data: { status: 'stopped', exitstatus: 'start failed: QEMU exited' } })
 		reply({ data: [{ n: 1, t: 'start failed: QEMU exited' }] })
@@ -44,7 +34,7 @@ describe('lifecycle calls wait for the task', () => {
 	})
 
 	test('a task that lost the config lock is posted again until it runs', async () => {
-		const { cluster, reply, calls } = fixture()
+		const { cluster, reply, calls } = clusterFixture({ node: 'ms01-0160' })
 		const locked = {
 			status: 'stopped',
 			exitstatus: "can't lock file '/var/lock/qemu-server/lock-9000.conf' - got timeout",
@@ -66,7 +56,7 @@ describe('lifecycle calls wait for the task', () => {
 	})
 
 	test('any other failure is thrown after one attempt', async () => {
-		const { cluster, reply, calls } = fixture()
+		const { cluster, reply, calls } = clusterFixture({ node: 'ms01-0160' })
 		reply({ data: UPID })
 		reply({ data: { status: 'stopped', exitstatus: 'VM quit/powerdown failed' } })
 		reply({ data: [] })
@@ -75,7 +65,7 @@ describe('lifecycle calls wait for the task', () => {
 	})
 
 	test('every power call hits its own endpoint with its parameters', async () => {
-		const { cluster, reply, calls } = fixture()
+		const { cluster, reply, calls } = clusterFixture({ node: 'ms01-0160' })
 		const vm = cluster.vm(9000)
 		for (let i = 0; i < 7; i += 1) taskDone(reply)
 		await vm.stop({ timeout: 30 })
@@ -105,7 +95,7 @@ describe('lifecycle calls wait for the task', () => {
 	})
 
 	test('a container has the same calls on its own path', async () => {
-		const { cluster, reply, calls } = fixture()
+		const { cluster, reply, calls } = clusterFixture({ node: 'ms01-0160' })
 		const ct = cluster.container(110, 'ms02-0078')
 		for (let i = 0; i < 6; i += 1) taskDone(reply)
 		await ct.start()
@@ -126,7 +116,7 @@ describe('lifecycle calls wait for the task', () => {
 	})
 
 	test('clone and migrate post their parameters and wait', async () => {
-		const { cluster, reply, calls } = fixture()
+		const { cluster, reply, calls } = clusterFixture({ node: 'ms01-0160' })
 		const vm = cluster.vm(9000)
 		taskDone(reply)
 		taskDone(reply)
@@ -143,14 +133,13 @@ describe('lifecycle calls wait for the task', () => {
 	})
 
 	test('delete closes the consoles first and passes purge in the query', async () => {
-		const sockets = fakeSockets()
-		const { cluster, reply, calls } = fixture({ socketFactory: sockets.factory })
+		const { cluster, reply, calls, vnc } = clusterFixture({ node: 'ms01-0160' })
 		const vm = cluster.vm(9000)
 		reply({ data: VNC_PROXY })
 		await vm.kvm.press('enter')
 		taskDone(reply)
 		await vm.delete({ purge: true })
-		expect(sockets.vnc[0]?.closes).toBe(1)
+		expect(vnc[0]?.closes).toBe(1)
 		const destroy = calls().find((call) => call.method === 'DELETE')
 		expect(destroy?.path).toBe(`${VM}?purge=1`)
 	})
@@ -158,7 +147,7 @@ describe('lifecycle calls wait for the task', () => {
 
 describe('status, config and snapshots', () => {
 	test('status and waitFor read the current status', async () => {
-		const { cluster, reply, requests } = fixture()
+		const { cluster, reply, requests } = clusterFixture({ node: 'ms01-0160' })
 		const vm = cluster.vm(9000)
 		reply({ data: { status: 'stopped', vmid: 9000 } })
 		expect((await vm.status()).runState).toBe('stopped')
@@ -174,7 +163,7 @@ describe('status, config and snapshots', () => {
 	})
 
 	test('config reads the normalized config and configure writes through PUT', async () => {
-		const { cluster, reply, calls } = fixture()
+		const { cluster, reply, calls } = clusterFixture({ node: 'ms01-0160' })
 		const vm = cluster.vm(9000)
 		reply({ data: { name: 'probe', memory: 1024, net0: 'virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0' } })
 		const config = await vm.config()
@@ -190,7 +179,7 @@ describe('status, config and snapshots', () => {
 	})
 
 	test('notes reads the description and setNotes replaces it', async () => {
-		const { cluster, reply, calls } = fixture()
+		const { cluster, reply, calls } = clusterFixture({ node: 'ms01-0160' })
 		const ct = cluster.container(110, 'ms02-0078')
 		reply({ data: { description: 'facade check' } })
 		expect(await ct.notes()).toBe('facade check')
@@ -205,7 +194,7 @@ describe('status, config and snapshots', () => {
 	})
 
 	test('snapshot passes the name and the options through and waits', async () => {
-		const { cluster, reply, requests } = fixture()
+		const { cluster, reply, requests } = clusterFixture({ node: 'ms01-0160' })
 		taskDone(reply)
 		await cluster.vm(9000).snapshot('clean', { description: 'before install', vmstate: true })
 		const create = requests[0]
@@ -218,7 +207,7 @@ describe('status, config and snapshots', () => {
 	})
 
 	test('snapshots, rollback and deleteSnapshot use the snapshot subtree', async () => {
-		const { cluster, reply, calls } = fixture()
+		const { cluster, reply, calls } = clusterFixture({ node: 'ms01-0160' })
 		const vm = cluster.vm(9000)
 		reply({
 			data: [
@@ -237,7 +226,7 @@ describe('status, config and snapshots', () => {
 	})
 
 	test('firewall and api expose the module handle underneath', () => {
-		const { cluster } = fixture()
+		const { cluster } = clusterFixture({ node: 'ms01-0160' })
 		const vm = cluster.vm(9000)
 		expect(vm.firewall).toBe(vm.api.firewall)
 		expect(vm.guest).toBe(vm.api.agent)
@@ -247,7 +236,7 @@ describe('status, config and snapshots', () => {
 
 describe('running commands inside a guest', () => {
 	test('the vm os helper is picked from the config and kept', async () => {
-		const { cluster, reply, calls } = fixture()
+		const { cluster, reply, calls } = clusterFixture({ node: 'ms01-0160' })
 		const vm = cluster.vm(9000)
 		reply({ data: { ostype: 'l26' } })
 		reply({ data: { pid: 42 } })
@@ -264,7 +253,7 @@ describe('running commands inside a guest', () => {
 	})
 
 	test('a failed os open is retried on the next await', async () => {
-		const { cluster, reply } = fixture()
+		const { cluster, reply } = clusterFixture({ node: 'ms01-0160' })
 		const vm = cluster.vm(9000)
 		reply({ status: 500, body: 'no such VM' })
 		await expect(vm.os).rejects.toThrow()
@@ -273,7 +262,7 @@ describe('running commands inside a guest', () => {
 	})
 
 	test('waitForAgent polls ping until it answers', async () => {
-		const { cluster, reply, requests } = fixture()
+		const { cluster, reply, requests } = clusterFixture({ node: 'ms01-0160' })
 		const vm = cluster.vm(9000)
 		reply({ status: 500, body: 'QEMU guest agent is not running' })
 		reply({ data: { result: null } })
@@ -286,7 +275,10 @@ describe('running commands inside a guest', () => {
 
 	test('a container runs commands through pct exec on its node shell', async () => {
 		const ssh = fakeSsh({ 'pct exec 110': { stdout: 'alpine\n' } })
-		const { cluster, requests } = fixture({ shell: { ssh: { spawn: ssh.spawn } } })
+		const { cluster, requests } = clusterFixture({
+			node: 'ms01-0160',
+			shell: { ssh: { spawn: ssh.spawn } },
+		})
 		const ct = cluster.container(110, 'ms02-0078')
 		const result = await ct.exec('cat /etc/hostname')
 		expect(result.stdout).toBe('alpine\n')
@@ -303,7 +295,7 @@ describe('running commands inside a guest', () => {
 	})
 
 	test('a guest agent error surfaces as the API error it was', async () => {
-		const { cluster, reply } = fixture()
+		const { cluster, reply } = clusterFixture({ node: 'ms01-0160' })
 		reply({ status: 500, body: 'QEMU guest agent is not running' })
 		await expect(cluster.vm(9000).guest.output(['hostname'])).rejects.toBeInstanceOf(PveApiError)
 	})

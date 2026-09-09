@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'bun:test'
-import type { PveClient } from '../core/client.ts'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { PveConsoleError } from '../core/errors.ts'
+import { closeMockClients, mockClient } from '../core/test-support/api-mock.ts'
 import { vncDesEncrypt } from './des.ts'
 import {
 	buildClientCutText,
@@ -12,69 +12,17 @@ import {
 	RFB_ENCODING_DESKTOP_SIZE,
 	RFB_ENCODING_RAW,
 } from './rfb.ts'
-import type { ConsoleSocket, SocketFactory } from './socket.ts'
+import type { SocketFactory } from './socket.ts'
+import { FakeSocket } from './test-support/sockets.ts'
 import { VncSession, type VncSessionOptions } from './vnc.ts'
 
-/** A socket the test drives byte by byte. */
-class FakeSocket implements ConsoleSocket {
-	open = true
-	readonly sent: Buffer[] = []
-	closes = 0
-
-	private messageHandler: ((data: Buffer) => void) | undefined
-	private errorHandler: ((error: Error) => void) | undefined
-	private closeHandler: (() => void) | undefined
-
-	send(data: Buffer | string): void {
-		this.sent.push(typeof data === 'string' ? Buffer.from(data, 'ascii') : data)
-	}
-
-	close(): void {
-		this.closes++
-		this.open = false
-	}
-
-	onOpen(): void {}
-
-	onMessage(handler: (data: Buffer) => void): void {
-		this.messageHandler = handler
-	}
-
-	onError(handler: (error: Error) => void): void {
-		this.errorHandler = handler
-	}
-
-	onClose(handler: () => void): void {
-		this.closeHandler = handler
-	}
-
-	/** Delivers server bytes in pieces of `chunkSize`. */
-	deliver(data: Buffer, chunkSize = data.length): void {
-		for (let i = 0; i < data.length; i += chunkSize) {
-			this.messageHandler?.(data.subarray(i, Math.min(i + chunkSize, data.length)))
-		}
-	}
-
-	fireError(error: Error): void {
-		this.errorHandler?.(error)
-	}
-
-	fireClose(): void {
-		this.open = false
-		this.closeHandler?.()
-	}
-
-	/** Everything sent since the marker. */
-	since(marker: number): Buffer[] {
-		return this.sent.slice(marker)
-	}
-}
+afterEach(closeMockClients)
 
 const PASSWORD = 'sekret42'
 
 function newSession(options: Partial<VncSessionOptions> = {}): VncSession {
 	return new VncSession({
-		client: {} as PveClient,
+		client: mockClient().client,
 		node: 'ms01',
 		vmid: 100,
 		handshakeTimeoutMs: 1000,
@@ -704,16 +652,6 @@ describe('session lifecycle', () => {
 	})
 })
 
-/** A client stub that answers vncproxy and nothing else. */
-function stubClient(): PveClient {
-	return {
-		baseUrl: 'https://192.168.80.21:8006',
-		auth: { has: () => false, tokenHeader: () => 'PVEAPIToken=x' },
-		http: { verifySsl: false },
-		post: async () => ({ port: '5900', ticket: 'TICKET', user: 'root@pam', password: PASSWORD }),
-	} as unknown as PveClient
-}
-
 /** A socket factory that plays a whole RFB handshake once the socket exists. */
 function handshakeFactory(sockets: FakeSocket[], types: number[]): SocketFactory {
 	return (url, options) => {
@@ -733,14 +671,20 @@ function handshakeFactory(sockets: FakeSocket[], types: number[]): SocketFactory
 describe('connect', () => {
 	test('opens the socket at the vncwebsocket URL with the token header and the proxy password', async () => {
 		const sockets: FakeSocket[] = []
+		const mock = mockClient({ ticket: false })
+		mock.reply({ data: { port: '5900', ticket: 'TICKET', user: 'root@pam', password: PASSWORD } })
 		const session = newSession({
-			client: stubClient(),
+			client: mock.client,
 			socketFactory: handshakeFactory(sockets, [2]),
 		})
 		await expect(session.connect()).resolves.toEqual({ width: 800, height: 600 })
+		expect(mock.last().path).toBe('/nodes/ms01/qemu/100/vncproxy')
 		expect(sockets[0]).toMatchObject({
-			url: 'wss://192.168.80.21:8006/api2/json/nodes/ms01/qemu/100/vncwebsocket?port=5900&vncticket=TICKET',
-			options: { headers: { Authorization: 'PVEAPIToken=x' }, verifySsl: false },
+			url: `${mock.client.baseUrl.replace('https://', 'wss://')}/api2/json/nodes/ms01/qemu/100/vncwebsocket?port=5900&vncticket=TICKET`,
+			options: {
+				headers: { Authorization: mock.client.auth.tokenHeader() },
+				verifySsl: false,
+			},
 		})
 		expect(sockets[0]?.sent[2]).toEqual(vncDesEncrypt(PASSWORD, Buffer.alloc(16, 0x11)))
 		session.close()
@@ -748,8 +692,10 @@ describe('connect', () => {
 
 	test('closes the socket it opened when the session already has one', async () => {
 		const sockets: FakeSocket[] = []
+		const mock = mockClient()
+		mock.reply({ data: { port: '5900', ticket: 'TICKET', user: 'root@pam' } })
 		const session = newSession({
-			client: stubClient(),
+			client: mock.client,
 			socketFactory: handshakeFactory(sockets, [1]),
 		})
 		session.attach(new FakeSocket()).catch(() => undefined)
