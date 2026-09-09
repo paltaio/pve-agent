@@ -64,7 +64,7 @@ export function resolveEndpoint(method: string, path: string): EndpointInfo | un
  * when the parameter is a plain value.
  *
  * `path` may be concrete, and `param` may be a concrete indexed key, so
- * ('PUT', '/nodes/ms01/qemu/110/config', 'net0') finds the format registered
+ * ('PUT', '/nodes/pve1/qemu/110/config', 'net0') finds the format registered
  * for '/nodes/{node}/qemu/{vmid}/config' and 'net[n]'.
  */
 export function propertyFormatFor(

@@ -359,7 +359,7 @@ export class PveClient {
 	 * Send one API call and return the `data` field of the response.
 	 *
 	 * `path` is the concrete path below /api2/json, with variables already filled
-	 * in, such as `/nodes/ms01/qemu/100/config`. With `withAttribs` the call
+	 * in, such as `/nodes/pve1/qemu/100/config`. With `withAttribs` the call
 	 * returns the sibling keys of `data` alongside it instead.
 	 */
 	request<T>(

@@ -40,7 +40,7 @@ export interface GuestRef {
  */
 export type RunState = 'running' | 'stopped' | 'paused'
 
-/** The API path a guest hangs off, such as /nodes/ms01-0160/lxc/110. */
+/** The API path a guest hangs off, such as /nodes/pve1/lxc/110. */
 export function guestPath(ref: GuestRef): string {
 	return `/nodes/${encodeURIComponent(ref.node)}/${ref.type ?? 'qemu'}/${ref.vmid}`
 }
@@ -273,7 +273,7 @@ interface RawSummary {
  */
 export function normalizeSummary(raw: RawSummary, type: GuestType, node: string): GuestSummary {
 	const vmid = toOptionalNumber(raw.vmid)
-	// Falling back to 0 would build paths such as /nodes/ms01/qemu/0 and send them.
+	// Falling back to 0 would build paths such as /nodes/pve1/qemu/0 and send them.
 	if (vmid === undefined) {
 		throw new PveApiError({
 			status: 200,

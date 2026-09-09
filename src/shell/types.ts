@@ -31,7 +31,7 @@ export interface CommandResult {
 export interface ShellTransport {
 	readonly kind: ShellTransportKind
 	readonly node: string
-	/** Human-readable target, such as 'ssh root@192.168.80.21'. */
+	/** Human-readable target, such as 'ssh root@192.0.2.10'. */
 	readonly description: string
 
 	run(command: string, options?: RunOptions): Promise<CommandResult>

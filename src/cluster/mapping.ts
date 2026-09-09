@@ -7,7 +7,7 @@
  * ticket; a `mapping=` entry does not.
  *
  * `map` is an array of property strings, one per node, such as
- * `node=ms01-0160,path=0000:01:00.0,id=10de:2482`.
+ * `node=pve1,path=0000:01:00.0,id=10de:2482`.
  */
 
 import type { PveClient } from '../core/client.ts'

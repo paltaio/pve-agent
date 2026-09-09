@@ -94,7 +94,7 @@ abstract class PveGuestBase {
 		this.console = new GuestConsole(context, ref)
 	}
 
-	/** The guest's API path, such as /nodes/ms01-0160/lxc/110. */
+	/** The guest's API path, such as /nodes/pve1/lxc/110. */
 	get path(): string {
 		return this.api.path
 	}
