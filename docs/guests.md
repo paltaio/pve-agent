@@ -10,7 +10,7 @@ import pve from 'pve-agent'
 await using cluster = await pve.connect()
 
 const vm = cluster.vm(100) // sends nothing
-const ct = cluster.container(110, 'ms02-0078')
+const ct = cluster.container(110, 'pve3')
 const guest = await cluster.guest(110) // one lookup, whichever type it is
 
 if (guest.type === 'qemu') await guest.kvm.press('enter')
@@ -28,7 +28,7 @@ import pve from 'pve-agent'
 await using cluster = await pve.connect()
 
 const vm = await cluster.createVm({
-	node: 'ms01-0160', // defaults to PVE_NODE
+	node: 'pve1', // defaults to PVE_NODE
 	vmid: 9001, // defaults to the lowest free id
 	name: 'demo',
 	memory: '2048',
@@ -61,7 +61,7 @@ import pve from 'pve-agent'
 await using cluster = await pve.connect()
 
 const vm = await cluster.createVm({
-	node: 'ms01-0160',
+	node: 'pve1',
 	vmid: 9001,
 	archive: 'backup:backup/vzdump-qemu-100-2026_09_01-03_00_00.vma.zst',
 	force: true,
@@ -76,7 +76,7 @@ import pve from 'pve-agent'
 await using cluster = await pve.connect()
 
 const ct = await cluster.createContainer({
-	node: 'ms01-0160',
+	node: 'pve1',
 	hostname: 'demo',
 	ostemplate: 'local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst',
 	rootfs: 'local-zfs:8',
@@ -305,10 +305,10 @@ const vm = cluster.vm(100)
 const ct = cluster.container(110)
 
 await vm.clone({ newid: 9010, full: true, storage: 'local-zfs', name: 'copy' })
-await vm.migrate({ target: 'ms02-0066', online: true, bwlimit: 100_000 })
-await ct.migrate({ target: 'ms02-0066', restart: true })
+await vm.migrate({ target: 'pve2', online: true, bwlimit: 100_000 })
+await ct.migrate({ target: 'pve2', restart: true })
 
-const pre = await vm.api.migratePreconditions('ms02-0066')
+const pre = await vm.api.migratePreconditions('pve2')
 console.log(pre.allowedNodes, pre.notAllowedNodes, pre.localDisks, pre.localResources)
 ```
 
@@ -582,10 +582,10 @@ import pve, { findGuest, listContainers, listGuests, listVms, openGuest } from '
 await using cluster = await pve.connect()
 const client = cluster.client
 
-await listGuests(client, { node: 'ms01-0160', excludeTemplates: true })
+await listGuests(client, { node: 'pve1', excludeTemplates: true })
 await findGuest(client, 110) // undefined when the vmid is free
 const api = await openGuest(client, 110) // QemuApi or LxcApi; throws PveNotFoundError
 console.log(api.type, api.path)
-await listVms(client, 'ms01-0160', { full: true })
-await listContainers(client, 'ms01-0160')
+await listVms(client, 'pve1', { full: true })
+await listContainers(client, 'pve1')
 ```

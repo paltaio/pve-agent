@@ -27,7 +27,7 @@ await storage.create({
 	server: '10.0.0.9',
 	export: '/srv/backup',
 	content: 'backup',
-	nodes: 'ms01-0160,ms02-0066',
+	nodes: 'pve1,pve2',
 	'prune-backups': 'keep-daily=7,keep-weekly=4',
 })
 await storage.update('backup-nfs', { disable: true })
@@ -47,7 +47,7 @@ Build the definition from what a server offers rather than guessing:
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const scan = cluster.node('ms01-0160').api.scan
+const scan = cluster.node('pve1').api.scan
 
 await scan.nfs('10.0.0.9')
 await scan.cifs({ server: '10.0.0.9', username: 'svc', password: process.env['CIFS_PASSWORD'] ?? '' })
@@ -71,7 +71,7 @@ here do.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const storage = cluster.node('ms01-0160').api.storage
+const storage = cluster.node('pve1').api.storage
 
 await storage.list({ content: 'images', enabled: true })
 await storage.status('local-zfs') // total, used, avail, active, enabled
@@ -100,9 +100,9 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 
-const upid = await cluster.node('ms01-0160').api.storage.copyVolume('local-zfs', 'local-zfs:vm-100-disk-0', {
+const upid = await cluster.node('pve1').api.storage.copyVolume('local-zfs', 'local-zfs:vm-100-disk-0', {
 	target: 'tank-vms',
-	target_node: 'ms02-0066',
+	target_node: 'pve2',
 })
 await cluster.waitForTask(upid)
 ```
@@ -115,7 +115,7 @@ Two ways, and they take different things.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const storage = cluster.node('ms01-0160').api.storage
+const storage = cluster.node('pve1').api.storage
 
 // Upload from this machine
 const file = Bun.file('./debian-13.iso')
@@ -150,7 +150,7 @@ Container templates are `vztmpl` content:
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const storage = cluster.node('ms01-0160').api.storage
+const storage = cluster.node('pve1').api.storage
 
 const templates = await storage.content('local', { content: 'vztmpl' })
 console.log(templates.map((volume) => volume.volid))
@@ -171,7 +171,7 @@ Running a backup at once is a node call; scheduling one is cluster config.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const node = cluster.node('ms01-0160')
+const node = cluster.node('pve1')
 
 const upid = await node.api.backup.run({
 	vmid: '100,110',
@@ -212,7 +212,7 @@ endpoints.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const storage = cluster.node('ms01-0160').api.storage
+const storage = cluster.node('pve1').api.storage
 
 const preview = await storage.prunePreview('backup', { 'prune-backups': 'keep-daily=7', vmid: 100 })
 for (const candidate of preview) console.log(candidate.volid, candidate.mark)
@@ -229,7 +229,7 @@ Preview first. `prunePreview` lists every backup with the `keep`, `remove`,
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const storage = cluster.node('ms01-0160').api.storage
+const storage = cluster.node('pve1').api.storage
 const volid = 'pbs:backup/vm/100/2026-09-01T03:00:00Z'
 
 const entries = await storage.fileRestoreList('pbs', volid, '/')
@@ -258,7 +258,7 @@ task, so the return value is a UPID.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const disks = cluster.node('ms01-0160').api.disks
+const disks = cluster.node('pve1').api.disks
 
 for (const disk of await disks.list({ type: 'unused' })) {
 	console.log(disk.devpath, disk.size, disk.model, disk.used, disk.health)
@@ -275,7 +275,7 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 
-await cluster.waitForTask(await cluster.node('ms01-0160').api.disks.wipe('/dev/sdb'))
+await cluster.waitForTask(await cluster.node('pve1').api.disks.wipe('/dev/sdb'))
 ```
 
 Building a backend on a disk:
@@ -284,7 +284,7 @@ Building a backend on a disk:
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const disks = cluster.node('ms01-0160').api.disks
+const disks = cluster.node('pve1').api.disks
 
 await cluster.waitForTask(
 	await disks.createZfs({
@@ -321,7 +321,7 @@ and otherwise only removed.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 await shell.zfs.scrub('tank')
 await shell.zfs.createDataset('tank/data', { properties: { compression: 'zstd' } })
@@ -344,10 +344,10 @@ await using cluster = await pve.connect()
 await cluster.api.replication.create({
 	id: '110-0',
 	type: 'local',
-	target: 'ms02-0066',
+	target: 'pve2',
 	schedule: '*/15',
 })
-const node = cluster.node('ms02-0078')
+const node = cluster.node('pve3')
 await node.api.replication.list({ guest: 110 })
 const status = await node.api.replication.status('110-0')
 console.log(status.lastSync, status.failCount, status.error)

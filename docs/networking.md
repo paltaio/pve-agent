@@ -13,7 +13,7 @@ So a script that creates a bridge and stops there has changed nothing.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const net = cluster.node('ms01-0160').api.network
+const net = cluster.node('pve1').api.network
 
 await net.create({ iface: 'vmbr1', type: 'bridge', bridge_ports: 'enp2s0', autostart: true })
 
@@ -31,7 +31,7 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 
-await cluster.node('ms01-0160').api.network.revert()
+await cluster.node('pve1').api.network.revert()
 ```
 
 `list` returns the staged file's interfaces once a change is pending, so
@@ -43,7 +43,7 @@ staged interface.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const net = cluster.node('ms01-0160').api.network
+const net = cluster.node('pve1').api.network
 
 for (const entry of await net.list({ type: 'bridge' })) {
 	console.log(entry.iface, entry.cidr, entry.bridgePorts, entry.active)
@@ -63,7 +63,7 @@ the FRR config as it is.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const net = cluster.node('ms01-0160').api.network
+const net = cluster.node('pve1').api.network
 
 await net.create({
 	iface: 'bond0',
@@ -93,7 +93,7 @@ belong to the shell layer, editing the file directly:
 import pve, { shHeredoc } from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 const text = await shell.output('cat /etc/network/interfaces')
 const edited = `${text}\n\nauto vmbr2\niface vmbr2 inet manual\n\tbridge-ports none\n`
@@ -154,7 +154,7 @@ should.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const node = cluster.node('ms01-0160')
+const node = cluster.node('pve1')
 const guest = await cluster.guest(100)
 
 // Datacenter
@@ -246,7 +246,7 @@ The same alias and IP set calls exist per guest under `guest.firewall`.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const node = cluster.node('ms01-0160')
+const node = cluster.node('pve1')
 const guest = await cluster.guest(100)
 
 await node.api.firewall.log({ limit: 200 })

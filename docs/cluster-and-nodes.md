@@ -66,11 +66,11 @@ for (const entry of await cluster.nodes()) {
 	console.log(entry.node, entry.status, entry.uptime, entry.maxmem)
 }
 
-const node = cluster.node('ms01-0160')
+const node = cluster.node('pve1')
 const status = await node.status()
 console.log(status.uptime, status.loadavg, status.kversion, status.pveversion, status['boot-info'])
 await node.api.version()
-await cluster.list({ node: 'ms01-0160', excludeTemplates: true })
+await cluster.list({ node: 'pve1', excludeTemplates: true })
 ```
 
 Most node endpoints carry `proxyTo: 'node'`, so whichever node the client
@@ -80,8 +80,8 @@ reached that way and needs its own client:
 ```ts
 import { NodeApi, PveClient } from 'pve-agent'
 
-const client = PveClient.fromEnv({ host: '192.168.80.24' })
-const joining = new NodeApi(client, 'ms03-0001')
+const client = PveClient.fromEnv({ host: '192.0.2.12' })
+const joining = new NodeApi(client, 'pve3')
 console.log(await joining.version())
 client.close()
 ```
@@ -97,7 +97,7 @@ reachable.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const node = cluster.node('ms01-0160')
+const node = cluster.node('pve1')
 
 await node.api.getConfig()
 await node.api.setConfig({ description: 'rack 2, top', wakeonlan: 'mac=aa:bb:cc:dd:ee:ff' })
@@ -123,7 +123,7 @@ comes from chrony or systemd-timesyncd.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const node = cluster.node('ms01-0160')
+const node = cluster.node('pve1')
 
 await node.api.syslog({ service: 'pvestatd', limit: 200 })
 await node.api.journal({ lastentries: 500, unit: 'pve-cluster.service' })
@@ -141,7 +141,7 @@ await node.api.certificates.info()
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const node = cluster.node('ms01-0160')
+const node = cluster.node('pve1')
 
 await node.api.reboot() // guests are not shut down first
 await node.api.shutdown()
@@ -150,7 +150,7 @@ await node.api.wakeOnLan() // runs on another node, so it works while this one i
 await cluster.waitForTask(await node.api.startAll({ force: true }))
 await cluster.waitForTask(await node.api.stopAll({ timeout: 180 }))
 await cluster.waitForTask(await node.api.suspendAll())
-await cluster.waitForTask(await node.api.migrateAll({ target: 'ms02-0066' }))
+await cluster.waitForTask(await node.api.migrateAll({ target: 'pve2' }))
 ```
 
 `migrateAll` is the way to empty a node before maintenance.
@@ -165,7 +165,7 @@ await using cluster = await pve.connect()
 
 await cluster.waitForTask(await cluster.api.bulk.start({ vms: [100, 101, 110] }))
 await cluster.waitForTask(await cluster.api.bulk.shutdown({ 'max-workers': 4, timeout: 120 }))
-await cluster.waitForTask(await cluster.api.bulk.migrate({ target: 'ms02-0066', online: true }))
+await cluster.waitForTask(await cluster.api.bulk.migrate({ target: 'pve2', online: true }))
 await cluster.waitForTask(await cluster.api.bulk.suspend({ 'to-disk': true }))
 ```
 
@@ -175,7 +175,7 @@ await cluster.waitForTask(await cluster.api.bulk.suspend({ 'to-disk': true }))
 import pve, { isNodeService, NODE_SERVICES } from 'pve-agent'
 
 await using cluster = await pve.connect()
-const node = cluster.node('ms01-0160')
+const node = cluster.node('pve1')
 
 console.log(NODE_SERVICES.length, isNodeService('nginx'))
 await node.api.services.list()
@@ -196,7 +196,7 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 
-const results = await cluster.node('ms01-0160').api.execute([
+const results = await cluster.node('pve1').api.execute([
 	{ path: 'qemu/100/status/current', method: 'GET' },
 	{ path: 'qemu/101/status/current', method: 'GET' },
 ])
@@ -226,8 +226,8 @@ const ha = cluster.api.ha
 await ha.listResources({ type: 'vm' })
 await ha.createResource({ sid: 'vm:100', state: 'started', max_restart: 2 })
 await ha.updateResource('vm:100', { state: 'stopped' })
-await ha.migrate('vm:100', 'ms02-0066')
-await ha.relocate('vm:100', 'ms02-0066')
+await ha.migrate('vm:100', 'pve2')
+await ha.relocate('vm:100', 'pve2')
 await ha.deleteResource('vm:100', { purge: true })
 
 await ha.statusCurrent()
@@ -250,9 +250,9 @@ const ha = cluster.api.ha
 
 await ha.createRule({
 	type: 'node-affinity',
-	rule: 'db-on-ms01',
+	rule: 'db-on-pve1',
 	resources: 'vm:100',
-	nodes: 'ms01-0160:2,ms02-0066:1',
+	nodes: 'pve1:2,pve2:1',
 	strict: true,
 })
 await ha.createRule({
@@ -300,7 +300,7 @@ const upid = await cluster.client.post<string>('/cluster/config', {
 	link0: '10.0.0.21',
 })
 await cluster.waitForTask(upid)
-await cluster.client.delete('/cluster/config/nodes/ms03-0001')
+await cluster.client.delete('/cluster/config/nodes/pve3')
 ```
 
 A join runs on the node that is joining, which is not a member yet and
@@ -312,10 +312,10 @@ import pve, { PveClient } from 'pve-agent'
 await using cluster = await pve.connect()
 const info = await cluster.api.membership.joinInfo()
 
-const joining = PveClient.fromEnv({ host: '192.168.80.24', username: 'root@pam' })
+const joining = PveClient.fromEnv({ host: '192.0.2.12', username: 'root@pam' })
 try {
 	const upid = await joining.post<string>('/cluster/config/join', {
-		hostname: '192.168.80.21',
+		hostname: '192.0.2.10',
 		password: process.env['PVE_PASSWORD'],
 		fingerprint: info.nodelist[0]?.pve_fp,
 	})
@@ -361,16 +361,16 @@ import pve from 'pve-agent'
 await using cluster = await pve.connect()
 const access = cluster.access
 
-const created = await access.createToken('agents@pve', 'automation', {
+const created = await access.createToken('automation@pve', 'ci', {
 	privsep: false,
 	comment: 'scripted work',
 })
 console.log(created.fullTokenId, created.value) // the secret is readable this once
-await access.listTokens('agents@pve')
-await access.updateToken('agents@pve', 'automation', { comment: 'renamed' })
-const rotated = await access.regenerateToken('agents@pve', 'automation')
+await access.listTokens('automation@pve')
+await access.updateToken('automation@pve', 'ci', { comment: 'renamed' })
+const rotated = await access.regenerateToken('automation@pve', 'ci')
 console.log(rotated.value)
-await access.deleteToken('agents@pve', 'automation')
+await access.deleteToken('automation@pve', 'ci')
 ```
 
 Realms, TFA and passwords:
@@ -440,11 +440,11 @@ const mapping = cluster.api.mapping
 
 await mapping.pci.create({
 	id: 'gpu0',
-	map: ['node=ms01-0160,path=0000:01:00.0,id=10de:2482'],
+	map: ['node=pve1,path=0000:01:00.0,id=10de:2482'],
 })
-await mapping.pci.list({ 'check-node': 'ms01-0160' })
-await mapping.usb.create({ id: 'yubi', map: ['node=ms01-0160,path=1-4,id=1050:0407'] })
-await mapping.dir.create({ id: 'media', map: ['node=ms01-0160,path=/srv/media'] })
+await mapping.pci.list({ 'check-node': 'pve1' })
+await mapping.usb.create({ id: 'yubi', map: ['node=pve1,path=1-4,id=1050:0407'] })
+await mapping.dir.create({ id: 'media', map: ['node=pve1,path=/srv/media'] })
 await mapping.pci.delete('gpu0')
 ```
 
@@ -494,10 +494,10 @@ await cluster.api.backup.notBackedUp()
 await cluster.api.replication.create({
 	id: '110-0',
 	type: 'local',
-	target: 'ms02-0066',
+	target: 'pve2',
 	schedule: '*/15',
 })
-const node = cluster.node('ms02-0078')
+const node = cluster.node('pve3')
 await node.api.replication.list({ guest: 110 })
 await cluster.waitForTask(await node.api.replication.runNow('110-0'))
 

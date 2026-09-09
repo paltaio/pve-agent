@@ -51,7 +51,7 @@ around:
 ```ts
 import { formatConfigValue, parseConfigValue, propertyFormatFor } from 'pve-agent'
 
-const path = '/nodes/ms01-0160/qemu/100/config'
+const path = '/nodes/pve1/qemu/100/config'
 const scsi0 = parseConfigValue('PUT', path, 'scsi0', 'local-zfs:vm-100-disk-0,size=32G,discard=on,ssd=1')
 // { file: 'local-zfs:vm-100-disk-0', size: '32G', discard: 'on', ssd: true }
 console.log(scsi0)
@@ -87,7 +87,7 @@ Two options:
 ```ts
 import { parseConfigValue } from 'pve-agent'
 
-parseConfigValue('PUT', '/nodes/ms01-0160/qemu/100/config', 'net0', 'virtio,bridge=vmbr0', {
+parseConfigValue('PUT', '/nodes/pve1/qemu/100/config', 'net0', 'virtio,bridge=vmbr0', {
 	strictKeys: true, // default: reject a sub-key the format does not declare
 	validate: false, // default: skip enum and required-sub-key checks
 })
@@ -176,7 +176,7 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 
-const endpoint = cluster.client.endpointFor('PUT', '/nodes/ms01-0160/qemu/100/config')
+const endpoint = cluster.client.endpointFor('PUT', '/nodes/pve1/qemu/100/config')
 for (const [name, param] of Object.entries(endpoint?.params ?? {})) {
 	if (param.propertyString) console.log(name, param.format)
 }

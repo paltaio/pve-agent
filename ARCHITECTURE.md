@@ -181,7 +181,7 @@ and the single 403 retry happen once and apply to all of them.
 endpoint whose answer is not JSON.
 
 `path` is concrete, below `/api2/json`, with the variables filled in:
-`/nodes/ms01-0160/qemu/110/config`. The return value is the `data` field of the
+`/nodes/pve1/qemu/110/config`. The return value is the `data` field of the
 response. `PveParams` is `object`, so a generated parameter interface passes
 without an index signature; the values are checked when they are encoded.
 
@@ -282,7 +282,7 @@ formatConfigValue(method, path, param, bag, options?): string
 ```
 
 All accept a concrete path and a concrete indexed key, so
-`('PUT', '/nodes/ms01/qemu/110/config', 'net0')` finds the `net[n]` format.
+`('PUT', '/nodes/pve1/qemu/110/config', 'net0')` finds the `net[n]` format.
 `resolveEndpoint` matches a concrete path against the templates with the same
 method and segment count; when several fit, the one with the most literal
 segments wins.

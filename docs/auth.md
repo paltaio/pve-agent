@@ -26,18 +26,18 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 
-const created = await cluster.access.createToken('agents@pve', 'automation', { privsep: false })
+const created = await cluster.access.createToken('automation@pve', 'ci', { privsep: false })
 console.log(created.fullTokenId, created.value) // the secret is readable this once
 await cluster.access.setAcl({
 	path: '/vms',
 	roles: 'PVEVMAdmin',
-	tokens: 'agents@pve!automation',
+	tokens: 'automation@pve!ci',
 	propagate: true,
 })
 ```
 
 `PVE_TOKEN_ID` takes either spelling. A bare `automation` is joined with
-`PVE_USER` to make `agents@pve!automation`; without `PVE_USER` a bare name
+`PVE_USER` to make `automation@pve!ci`; without `PVE_USER` a bare name
 throws `PveConfigError`.
 
 Five endpoints are registered with `allowtoken 0` and refuse a token however
@@ -146,7 +146,7 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 
-const decision = cluster.client.requiredTier('PUT', '/nodes/ms01-0160/lxc/110/config', {
+const decision = cluster.client.requiredTier('PUT', '/nodes/pve1/lxc/110/config', {
 	mp0: '/srv/data,mp=/data',
 })
 console.log(decision.tier) // 'ticket'
@@ -168,7 +168,7 @@ import pve, { PveTierError } from 'pve-agent'
 await using cluster = await pve.connect()
 
 try {
-	await cluster.node('ms01-0160').api.execute([{ path: 'version', method: 'GET' }])
+	await cluster.node('pve1').api.execute([{ path: 'version', method: 'GET' }])
 } catch (error) {
 	if (error instanceof PveTierError) {
 		console.error(error.required) // 'ticket'

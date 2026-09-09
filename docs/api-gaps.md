@@ -7,7 +7,7 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 
-const node = cluster.node('ms01-0160')
+const node = cluster.node('pve1')
 const shell = await node.shell
 ```
 
@@ -43,7 +43,7 @@ them have an endpoint.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 await shell.systemd.restart('nginx.service')
 await shell.systemd.writeUnit('app.service', '[Unit]\nDescription=app\n')
@@ -65,7 +65,7 @@ create or native encryption.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 await shell.zfs.scrub('tank')
 await shell.zfs.importPool('tank')
@@ -101,7 +101,7 @@ clear it.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 await shell.pct.unlock(110)
 await shell.qm.unlock(100)
@@ -119,7 +119,7 @@ sitting anywhere else on the node goes through `qm`:
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 await shell.qm.importDisk(9001, '/mnt/images/disk.qcow2', 'local-zfs', {
 	targetDisk: 'scsi1',
@@ -138,7 +138,7 @@ endpoint, and an interface the API rewrites drops them.
 import pve, { shHeredoc } from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 const edited = await shell.output('cat /etc/network/interfaces')
 await shell.run(`cat > /etc/network/interfaces ${shHeredoc(edited)}`, { check: true })
@@ -151,7 +151,7 @@ await shell.run('ifreload -a', { check: true })
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 await shell.qm.showCommand(100) // the generated kvm command line
 await shell.qm.rescan({ vmid: 100, dryRun: true }) // find unreferenced volumes
@@ -170,7 +170,7 @@ guest config, has no endpoint outside the fixed set (`/etc/hosts`,
 import pve, { shHeredoc, shQuote } from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 const text = await shell.output(`cat -- ${shQuote('/etc/pve/storage.cfg')}`)
 await shell.run(`cat > /etc/motd ${shHeredoc('welcome\n')}`, { check: true })
@@ -287,7 +287,7 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 
-await cluster.client.get('/nodes/ms01-0160/ceph/status', undefined, {
+await cluster.client.get('/nodes/pve1/ceph/status', undefined, {
 	allowUnknownEndpoint: true,
 })
 ```

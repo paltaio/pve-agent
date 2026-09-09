@@ -2,15 +2,15 @@
  * Watches a worker task by UPID, reads its log, then triggers each error
  * class the library throws and prints it by kind.
  *
- *   PVE_ENV_FILE=./pve.env PVE_TARGET_VMID=101 bun run examples/tasks-and-errors.ts
+ *   PVE_ENV_FILE=./pve.env PVE_TARGET_VMID=100 bun run examples/tasks-and-errors.ts
  *
  * Reads PVE_TARGET_VMID, a running Linux VM with the guest agent, and
  * PVE_NODE (default: the PVE_NODE of the env file) for the shell policy
  * check. The target's notes are changed through an asynchronous config
  * write and restored before the script exits. The shell check needs an SSH
  * key for root on the node, or a root@pam ticket in the env file. The tier
- * check needs an env file whose PVE_USER is not root@pam: a root@pam ticket
- * satisfies the root-only endpoint and the call goes through.
+ * check needs a ticket user other than root@pam, or no ticket at all: a
+ * root@pam ticket satisfies the root-only endpoint and the call goes through.
  */
 
 import pve, {
@@ -22,20 +22,8 @@ import pve, {
 	PveShellPolicyError,
 	PveTierError,
 	PveTimeoutError,
-	PveVm,
 } from '../src/index.ts'
-
-const SECOND = 1000
-const MINUTE = 60 * SECOND
-
-function env(name: string, fallback?: string): string {
-	const value = process.env[name] ?? fallback
-	if (value === undefined) {
-		console.error(`usage: ${name}=... PVE_ENV_FILE=./pve.env bun run examples/tasks-and-errors.ts`)
-		process.exit(1)
-	}
-	return value
-}
+import { env, EXAMPLE_PREFIX, MINUTE, runningVm, SECOND } from './support.ts'
 
 const TARGET_VMID = Number(env('PVE_TARGET_VMID'))
 
@@ -66,20 +54,11 @@ async function expectError(label: string, call: () => Promise<unknown>): Promise
 await using cluster = await pve.connect()
 const node = cluster.node(process.env['PVE_NODE'])
 
-const vm = await cluster.guest(TARGET_VMID)
-if (!(vm instanceof PveVm)) {
-	console.error(`guest ${TARGET_VMID} is a container; PVE_TARGET_VMID names a VM`)
-	process.exit(1)
-}
-const status = await vm.status()
-if (status.runState === 'paused') await vm.resume()
-if (status.runState === 'stopped') await vm.start()
-await vm.waitFor('running', { timeoutMs: 2 * MINUTE })
-await vm.waitForAgent({ timeoutMs: 3 * MINUTE })
+const vm = await runningVm(cluster, TARGET_VMID, { agent: true })
 
 const notes = await vm.notes()
 try {
-	const upid = await vm.api.setConfigAsync({ description: `pve-agent-example ${Date.now()}` })
+	const upid = await vm.api.setConfigAsync({ description: `${EXAMPLE_PREFIX}${Date.now()}` })
 	console.log(`task ${upid}`)
 	const done = await cluster.waitForTask(upid, { timeoutMs: MINUTE })
 	console.log(`task ${done.type} ${done.status} exit ${done.exitStatus} outcome ${done.outcome}`)
@@ -100,7 +79,10 @@ await expectError('tier', () => cluster.client.post(execute, { commands: '[]' })
 
 await expectError('guest-command', () => vm.guest.output(['sh', '-c', 'exit 3']))
 
-await expectError('shell-policy', async () => (await node.shell).run('rm -rf /'))
+// Refused by the policy before anything is spawned; harmless even if it ran.
+await expectError('shell-policy', async () =>
+	(await node.shell).run('zfs destroy nosuchpool/nosuchset'),
+)
 
 await expectError('timeout', () =>
 	vm.kvm.waitForScreen({ kind: 'color', color: '#000000', area: 2 }, { timeoutMs: SECOND }),

@@ -13,11 +13,11 @@ with bun. Everything hangs off one connected cluster object.
 `pve.env` next to this file, or the process environment:
 
 ```sh
-PVE_HOST=192.168.80.21
+PVE_HOST=192.0.2.10
 PVE_PORT=8006
 PVE_VERIFY_SSL=0
-PVE_NODE=ms01-0160
-PVE_TOKEN_ID=agents@pve!automation
+PVE_NODE=pve1
+PVE_TOKEN_ID=automation@pve!ci
 PVE_TOKEN_SECRET=...
 PVE_USER=root@pam
 PVE_PASSWORD=...
@@ -64,10 +64,10 @@ await cluster.nodes() // every node with status and resource totals
 await cluster.list() // every guest, both types, sorted by vmid
 await cluster.nextId() // lowest free vmid at or above 100
 
-cluster.vm(100) // PveVm on PVE_NODE; cluster.vm(100, 'ms02-0066') names the node; sends nothing
+cluster.vm(100) // PveVm on PVE_NODE; cluster.vm(100, 'pve2') names the node; sends nothing
 cluster.container(110) // PveContainer, same rule
 await cluster.guest(100) // finds node and type with one GET
-cluster.node() // PveNode for PVE_NODE, or cluster.node('ms01-0160')
+cluster.node() // PveNode for PVE_NODE, or cluster.node('pve1')
 
 await cluster.createVm({ name: 'test', memory: '2048', scsi0: 'local-zfs:16', net0: 'virtio,bridge=vmbr0' })
 await cluster.createContainer({ ostemplate: 'local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst', rootfs: 'local-zfs:8' })
@@ -102,7 +102,7 @@ await vm.snapshots()
 await vm.rollback('before-upgrade')
 await vm.deleteSnapshot('before-upgrade')
 await vm.clone({ newid: 101, full: true })
-await vm.migrate({ target: 'ms02-0066', online: true })
+await vm.migrate({ target: 'pve2', online: true })
 await vm.setNotes('owner: platform') // the config description; notes() reads it
 await vm.delete({ purge: true }) // stopped VM only; purge also drops backup, replication and HA entries
 
@@ -133,7 +133,7 @@ a root@pam ticket.
 ### Node handle
 
 ```ts
-const node = cluster.node('ms01-0160')
+const node = cluster.node('pve1')
 
 await node.status() // uptime, load, memory, kernel, PVE version, boot mode
 await node.tasks() // worker tasks, newest first

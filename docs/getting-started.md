@@ -39,10 +39,10 @@ A line may start with `export `, and a value may be quoted.
 
 ```sh
 # pve.env
-export PVE_HOST=192.168.80.21
+export PVE_HOST=192.0.2.10
 export PVE_VERIFY_SSL=0
-export PVE_NODE=ms01-0160
-export PVE_TOKEN_ID=agents@pve!automation
+export PVE_NODE=pve1
+export PVE_TOKEN_ID=automation@pve!ci
 export PVE_TOKEN_SECRET=1a2b3c4d-...
 export PVE_USER=root@pam
 export PVE_PASSWORD=...
@@ -55,7 +55,7 @@ needs `root@pam` escalates on its own. See [auth.md](auth.md).
 For the shell layer, authorise a key for root on each node:
 
 ```sh
-ssh-copy-id root@192.168.80.21
+ssh-copy-id root@192.0.2.10
 ```
 
 ## Connect
@@ -74,8 +74,8 @@ a request timeout, a trace hook and the shell settings:
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect({
-	host: '192.168.80.21',
-	node: 'ms01-0160',
+	host: '192.0.2.10',
+	node: 'pve1',
 	envFile: './clusters/lab.env',
 	timeoutMs: 30_000,
 	onRequest: (trace) => console.error(`${trace.decision.tier} ${trace.method} ${trace.path}`),
@@ -102,7 +102,7 @@ import pve from 'pve-agent'
 await using cluster = await pve.connect()
 
 const version = await cluster.version()
-// { version: '9.2.11', release: '9.2', repoid: 'f6997e698c7933ea' }
+// { version: '9.2.11', release: '9.2', repoid: '3b7c1d9e5f2a8046' }
 
 for (const node of await cluster.nodes()) {
 	console.log(node.node, node.status, node.uptime)
@@ -129,9 +129,9 @@ import pve from 'pve-agent'
 await using cluster = await pve.connect()
 
 const vm = cluster.vm(100) // node defaults to PVE_NODE
-const vm2 = cluster.vm(101, 'ms02-0066')
-const ct = cluster.container(110, 'ms02-0078')
-const node = cluster.node('ms01-0160')
+const vm2 = cluster.vm(101, 'pve2')
+const ct = cluster.container(110, 'pve3')
+const node = cluster.node('pve1')
 ```
 
 When you know the vmid but not the node or the type, `cluster.guest(vmid)`
@@ -196,9 +196,9 @@ import pve from 'pve-agent'
 await using cluster = await pve.connect()
 
 const config = await cluster.client.get<Record<string, string>>(
-	'/nodes/ms01-0160/qemu/100/config',
+	'/nodes/pve1/qemu/100/config',
 )
-const upid = await cluster.client.post<string>('/nodes/ms01-0160/qemu/100/status/start')
+const upid = await cluster.client.post<string>('/nodes/pve1/qemu/100/status/start')
 await cluster.client.waitForTask(upid)
 ```
 

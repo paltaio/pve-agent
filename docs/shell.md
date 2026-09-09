@@ -8,9 +8,9 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 console.log(shell.kind, shell.transport.description)
-// ssh  ssh root@ms01-0160
+// ssh  ssh root@pve1
 
 await shell.output('pveversion -v')
 ```
@@ -52,7 +52,7 @@ await using cluster = await pve.connect({
 	shell: {
 		transport: 'auto',
 		ssh: {
-			host: '192.168.80.21', // points every node shell at one address
+			host: '192.0.2.10', // points every node shell at one address
 			user: 'root',
 			port: 22,
 			identityFile: '/home/me/.ssh/pve',
@@ -77,7 +77,7 @@ names resolve.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 const result = await shell.run('systemctl is-active pvestatd', {
 	timeoutMs: 30_000,
@@ -104,7 +104,7 @@ the node, so quote every value that comes from outside:
 import pve, { shHeredoc, shJoin, shQuote } from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 const pattern = 'error'
 const dataset = 'rpool/data'
 
@@ -133,7 +133,7 @@ repository file or a keyring, has to be one path component: empty, `.`,
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 await shell.upload('./local.conf', '/etc/remote.conf')
 await shell.download('/var/log/syslog', './syslog')
@@ -189,7 +189,7 @@ shell. Open a second shell for the destructive part of a script:
 ```ts
 import { NodeShell } from 'pve-agent'
 
-const shell = await NodeShell.open({ node: 'ms01-0160', policy: { destructive: 'allow' } })
+const shell = await NodeShell.open({ node: 'pve1', policy: { destructive: 'allow' } })
 try {
 	await shell.zfs.destroyDataset('rpool/data/scratch', { recursive: true })
 } finally {
@@ -215,7 +215,7 @@ The API covers pool create and destroy. Everything else is here.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 await shell.zfs.listPools() // name, sizeBytes, allocatedBytes, freeBytes, health, capacityPercent
 await shell.zfs.poolStatus('rpool') // device tree, errors, scan line
@@ -263,7 +263,7 @@ unit, and every unit file, drop-in, timer and mask, is here.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 await shell.systemd.listUnits({ type: 'service', state: 'failed' })
 const status = await shell.systemd.status('nginx.service')
@@ -305,7 +305,7 @@ cannot install, upgrade or remove anything.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 await shell.apt.update()
 await shell.apt.listUpgradable() // { name, suite, currentVersion, newVersion, architecture }
@@ -340,7 +340,7 @@ already holds a shell:
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 await shell.qm.list() // { vmid, name, status, memoryMb, bootDiskGb, pid }
 await shell.qm.config(100)
@@ -378,7 +378,7 @@ Container-scoped commands take the vmid:
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms02-0078').shell
+const shell = await cluster.node('pve3').shell
 
 await shell.pct.list() // { vmid, status, lock, name }
 await shell.pct.config(110)
@@ -431,8 +431,8 @@ field says which failure it was.
 import { NodeShell, PveClient } from 'pve-agent'
 
 const shell = await NodeShell.open({
-	node: 'ms01-0160',
-	ssh: { host: '192.168.80.21', identityFile: '/home/me/.ssh/pve' },
+	node: 'pve1',
+	ssh: { host: '192.0.2.10', identityFile: '/home/me/.ssh/pve' },
 	policy: { allow: ['zpool', 'zfs'] },
 })
 try {
@@ -442,7 +442,7 @@ try {
 }
 
 const client = PveClient.fromEnv()
-const remote = await NodeShell.open({ node: 'ms01-0160', transport: 'termproxy', client })
+const remote = await NodeShell.open({ node: 'pve1', transport: 'termproxy', client })
 await remote.close()
 client.close()
 ```

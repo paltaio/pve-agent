@@ -43,13 +43,13 @@ bun test
 Put them in the environment, or in a `pve.env` file:
 
 ```sh
-PVE_HOST=192.168.80.21
+PVE_HOST=192.0.2.10
 PVE_PORT=8006
 PVE_VERIFY_SSL=0
-PVE_NODE=ms01-0160
+PVE_NODE=pve1
 
 # API token: reaches every endpoint except seventeen
-PVE_TOKEN_ID=agents@pve!automation
+PVE_TOKEN_ID=automation@pve!ci
 PVE_TOKEN_SECRET=...
 
 # root@pam ticket: the twelve root-only endpoints, the root-only parameters,
@@ -69,7 +69,7 @@ The shell layer uses SSH as root with key authentication, or the termproxy
 websocket with a `root@pam` ticket:
 
 ```sh
-ssh-copy-id root@192.168.80.21
+ssh-copy-id root@192.0.2.10
 ```
 
 ## First script
@@ -96,7 +96,7 @@ Creating a VM, booting it and reading its screen:
 ```ts
 import pve from 'pve-agent'
 
-await using cluster = await pve.connect({ node: 'ms01-0160' })
+await using cluster = await pve.connect({ node: 'pve1' })
 
 const vm = await cluster.createVm({
 	name: 'demo',
@@ -137,10 +137,10 @@ await cluster.nodes() // every node with status and resource totals
 await cluster.list() // every guest, both types, sorted by vmid
 await cluster.nextId() // lowest free vmid at or above 100
 
-cluster.vm(100) // PveVm on PVE_NODE; cluster.vm(100, 'ms02-0066') names the node
+cluster.vm(100) // PveVm on PVE_NODE; cluster.vm(100, 'pve2') names the node
 cluster.container(110) // PveContainer, same rule
 await cluster.guest(100) // finds node and type with one GET /cluster/resources
-cluster.node('ms01-0160') // PveNode; cluster.node() is PVE_NODE
+cluster.node('pve1') // PveNode; cluster.node() is PVE_NODE
 
 await cluster.createVm({ memory: '2048', scsi0: 'local-zfs:16' }) // waits for the create task
 await cluster.createContainer({
@@ -199,7 +199,7 @@ A node handle covers the node endpoints and the root shell on it.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const node = cluster.node('ms01-0160')
+const node = cluster.node('pve1')
 
 await node.status() // uptime, load, memory, kernel, PVE version, boot mode
 await node.api.network.list()
@@ -219,8 +219,8 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 
-const config = await cluster.client.get<Record<string, string>>('/nodes/ms01-0160/qemu/100/config')
-const upid = await cluster.client.post<string>('/nodes/ms01-0160/qemu/100/status/start')
+const config = await cluster.client.get<Record<string, string>>('/nodes/pve1/qemu/100/config')
+const upid = await cluster.client.post<string>('/nodes/pve1/qemu/100/status/start')
 await cluster.client.waitForTask(upid)
 ```
 
@@ -313,7 +313,7 @@ The registry in `src/generated` comes from `schema/apidoc.json`, dumped from a
 node running the version in `schema/pve-version.txt`:
 
 ```sh
-bun run schema root@ms01-0160   # rewrites schema/ from the node
+bun run schema root@pve1   # rewrites schema/ from the node
 bun run generate                # rewrites src/generated from the schema
 ```
 

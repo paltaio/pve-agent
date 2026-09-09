@@ -6,7 +6,7 @@ Anything PVE runs in the background answers with a UPID rather than a
 result:
 
 ```
-UPID:ms01-0160:00001A2B:0004C3D5:68B4F0A1:qmstart:9001:root@pam!automation:
+UPID:pve1:00001A2B:0004C3D5:68B4F0A1:qmstart:9001:root@pam!automation:
 ```
 
 The UPID names the node that runs the task, so none of the task calls take a
@@ -15,7 +15,7 @@ node argument.
 ```ts
 import { isUpid, parseUpid } from 'pve-agent'
 
-const upid = 'UPID:ms01-0160:00001A2B:0004C3D5:68B4F0A1:qmstart:9001:root@pam!automation:'
+const upid = 'UPID:pve1:00001A2B:0004C3D5:68B4F0A1:qmstart:9001:root@pam!automation:'
 console.log(isUpid(upid))
 const parsed = parseUpid(upid) // { node, pid, pstart, startTime, type, id, user, upid }
 console.log(parsed.node, parsed.type, parsed.id)
@@ -99,7 +99,7 @@ Listing and stopping:
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
-const node = cluster.node('ms01-0160')
+const node = cluster.node('pve1')
 
 await cluster.api.tasks() // every node, newest first
 await node.tasks({ limit: 50, errors: true, typefilter: 'qmstart' })
@@ -206,7 +206,7 @@ import pve, { PveTierError } from 'pve-agent'
 await using cluster = await pve.connect()
 
 try {
-	await cluster.node('ms01-0160').api.disks.wipe('/dev/sdz')
+	await cluster.node('pve1').api.disks.wipe('/dev/sdz')
 } catch (error) {
 	if (error instanceof PveTierError) {
 		console.error(error.required) // 'ticket'
@@ -223,7 +223,7 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 
-const decision = cluster.client.requiredTier('POST', '/nodes/ms01-0160/execute')
+const decision = cluster.client.requiredTier('POST', '/nodes/pve1/execute')
 if (decision.requiresRootPam && !cluster.client.auth.hasRootTicket) {
 	console.log('take the shell path')
 }
@@ -345,7 +345,7 @@ and the file helpers throw.
 import pve, { PveShellCommandError } from 'pve-agent'
 
 await using cluster = await pve.connect()
-const shell = await cluster.node('ms01-0160').shell
+const shell = await cluster.node('pve1').shell
 
 try {
 	await shell.output('zpool status nosuchpool')
