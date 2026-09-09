@@ -15,7 +15,15 @@ bun install
 bun test
 ```
 
-The library runs on Bun.
+The library runs on Bun and ships TypeScript source that uses Bun's `fetch`,
+`WebSocket` and `spawn`, so the consuming project's `tsconfig.json` needs the
+Bun types:
+
+```json
+{ "compilerOptions": { "types": ["bun"] } }
+```
+
+`@types/bun` is a peer dependency, installed alongside the package.
 
 ## Credentials
 
