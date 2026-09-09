@@ -15,7 +15,6 @@ with bun. Everything hangs off one connected cluster object.
 ```sh
 PVE_HOST=192.0.2.10
 PVE_PORT=8006
-PVE_VERIFY_SSL=0
 PVE_NODE=pve1
 PVE_TOKEN_ID=automation@pve!ci
 PVE_TOKEN_SECRET=...
@@ -26,8 +25,11 @@ PVE_PASSWORD=...
 Resolution order: arguments to `pve.connect()`, then `process.env`, then the
 env file named by `envFile`, `PVE_ENV_FILE`, or `./pve.env` in the working
 directory. A line may start with `export `. `PVE_PORT` defaults to 8006.
-`PVE_VERIFY_SSL` defaults to on; `0`, `false`, `no` or `off` turn it off.
-`PVE_NODE` is the node a call uses when none is named. A `PVE_TOKEN_ID`
+`PVE_VERIFY_SSL` defaults to on; `0`, `false`, `no` or `off` turn it off,
+which lets anyone on the path present their own certificate and read the
+credentials, so trust the node's certificate through `NODE_EXTRA_CA_CERTS`
+or the system store instead. `PVE_NODE` is the node a call uses when none is
+named. A `PVE_TOKEN_ID`
 without a `!` is joined to `PVE_USER`. `PVE_USER` with `PVE_PASSWORD` logs in
 for a ticket; `PVE_TOKEN_ID` with `PVE_TOKEN_SECRET` is an API token. Either
 alone works; with both set the client picks per call.
@@ -49,8 +51,8 @@ console.log(await cluster.vm(100).status())
 EOF
 ```
 
-Anything longer goes in `/tmp/pve-<task>.ts`, run the same way with
-`bun /tmp/pve-<task>.ts`. Edit that file for the next step.
+Anything longer goes in a file under a directory from `mktemp -d`, run the
+same way with `bun <dir>/<task>.ts`. Edit that file for the next step.
 
 ## The facade
 
@@ -71,6 +73,7 @@ cluster.node() // PveNode for PVE_NODE, or cluster.node('pve1')
 
 await cluster.createVm({ name: 'test', memory: '2048', scsi0: 'local-zfs:16', net0: 'virtio,bridge=vmbr0' })
 await cluster.createContainer({ ostemplate: 'local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst', rootfs: 'local-zfs:8' })
+const upid = await cluster.vm(100).api.start() // the module handle returns the UPID
 await cluster.waitForTask(upid) // final TaskStatus; throws PveTaskError
 
 cluster.api // ClusterApi: ha, backup, firewall, pools, storage, replication, membership
@@ -84,6 +87,8 @@ handle. Disks are config keys: `scsi0: 'local-zfs:16'` allocates 16 GiB.
 ### VM handle
 
 Every lifecycle call waits for the worker task and returns its final status.
+The power calls and `delete` post the task again for up to 45 seconds while
+it fails on the guest's config lock.
 
 ```ts
 const vm = cluster.vm(100)
@@ -121,8 +126,8 @@ Status, config, lifecycle, snapshots, notes and delete work as on a VM.
 const ct = cluster.container(110)
 
 await ct.exec('apt-get update') // pct exec on the node: { stdout, stderr, exitCode, durationMs }
-const os = await ct.os // LinuxGuest through pct exec
-const shell = await ct.shell // the node's root shell; shell.pct has push, pull, df, unlock
+const linux = await ct.os // LinuxGuest through pct exec
+const nodeShell = await ct.shell // the node's root shell; nodeShell.pct has push, pull, df, unlock
 ct.console // GuestConsole; a container always has one. ct.api is the LxcApi
 ```
 
@@ -138,7 +143,7 @@ const node = cluster.node('pve1')
 await node.status() // uptime, load, memory, kernel, PVE version, boot mode
 await node.tasks() // worker tasks, newest first
 node.api // NodeApi: network, storage, disks, firewall, apt, certificates, services, hardware, scan, tasks, replication, backup
-const shell = await node.shell // NodeShell
+await node.shell // NodeShell; see the node shell below
 ```
 
 ## Guest commands
@@ -153,7 +158,7 @@ const r = await vm.guest.exec(['systemctl', 'is-active', 'sshd']) // { exitCode,
 await vm.guest.output(['uname', '-a']) // trimmed stdout; throws on a non-zero exit
 await vm.guest.fileRead('/etc/hostname') // { content, truncated, bytesRead }
 await vm.guest.fileWrite('/etc/motd', 'hello\n')
-await vm.guest.ping() // osInfo, hostName, networkInterfaces, filesystems, users
+await vm.guest.ping() // throws when the agent is down; osInfo(), hostName(), networkInterfaces(), filesystems(), users() read the rest
 ```
 
 The OS helper takes a command line for the guest's command interpreter:
@@ -168,6 +173,7 @@ await os.run('ls /nonexistent') // { exitCode, stdout, stderr, timedOut }; retur
 await os.output('hostname -f') // trimmed stdout; throws on a non-zero exit
 await os.sh('set -e\napt-get update\napt-get install -y curl', { timeoutMs: 600_000 })
 await os.readFile('/etc/os-release')
+const key = 'ssh-ed25519 AAAA... ops@example\n'
 await os.writeFile('/root/.ssh/authorized_keys', key, { mode: '0600' })
 await os.exists('/var/run/reboot-required') // also hostname, delete, download, reboot, shutdown
 await os.osInfo() // { os, id, name, version, prettyName, kernel, arch, raw }
@@ -195,7 +201,7 @@ await vm.kvm.click(400, 300, 'left') // move(x, y) for the pointer alone
 await vm.kvm.scroll(400, 300, 'down', 3)
 
 const shot = await vm.kvm.screenshot({ format: 'png' }) // { format, width, height, data: Buffer, seq }
-await Bun.write('/tmp/vm100.png', shot.data)
+await Bun.write('vm100.png', shot.data)
 await vm.kvm.screenshot({ format: 'jpeg', quality: 70, fresh: true }) // fresh asks the guest for a repaint first
 
 const frame = await vm.kvm.snapshot() // raw frame: { width, height, buffer, seq }
@@ -215,7 +221,7 @@ full-size frame before taking a screenshot:
 ```ts
 await vm.kvm.press('shift')
 await vm.kvm.waitForScreen((f) => f.width > 640, { timeoutMs: 10_000 })
-const shot = await vm.kvm.screenshot({ format: 'png' })
+const awake = await vm.kvm.screenshot({ format: 'png' })
 ```
 
 ## The serial console
@@ -229,6 +235,8 @@ user would see.
 ```ts
 await vm.configure({ serial0: 'socket' }) // takes effect on the next start
 
+const password = process.env['VM_PASSWORD']
+if (!password) throw new Error('VM_PASSWORD is not set')
 await vm.console.waitForText(/login:/, { timeoutMs: 120_000 })
 await vm.console.login('root', password) // resolves with the screen at a shell prompt
 await vm.console.sendLine('ip -4 addr')
@@ -266,6 +274,7 @@ await shell.zfs.scrub('rpool')
 
 await shell.systemd.restart('pveproxy') // status, isActive, enable, disable, mask
 await shell.systemd.journal({ unit: 'pve-cluster', lines: 50, since: '-1h' })
+const unitText = '[Unit]\nDescription=scrub\n[Service]\nExecStart=/sbin/zpool scrub rpool\n'
 await shell.systemd.writeUnit('scrub.service', unitText)
 
 await shell.apt.update()
@@ -286,9 +295,10 @@ a script with `pve.connect({ shell: { policy: { destructive: 'allow' } } })`.
 ## Tasks and errors
 
 A lifecycle call on a handle waits for its worker task. The `api` object
-underneath returns the UPID instead; `cluster.waitForTask(upid, options)`
-waits for it, 10 minutes by default. `WARNINGS: n` counts as success unless
-`failOnWarnings: true`.
+underneath returns the UPID; `cluster.waitForTask(upid, options)` waits for
+it, 10 minutes by default. `WARNINGS: n` counts as success unless
+`failOnWarnings: true`. A task that failed ran once; only the config-lock
+retry above posts a task again.
 
 Every error extends `PveError` and carries `kind`:
 
