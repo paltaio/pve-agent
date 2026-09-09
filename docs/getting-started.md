@@ -224,7 +224,7 @@ await cluster.client.waitForTask(upid)
 
 Every call is matched against the generated registry, which gives the client
 the parameter metadata and the privilege flags. A path that is not in the
-registry throws `PveNotFoundError`, which catches typos; pass
+registry throws `PveConfigError`, which catches typos; pass
 `{ allowUnknownEndpoint: true }` to send it anyway.
 
 ## Running a script

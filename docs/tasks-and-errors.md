@@ -102,14 +102,14 @@ await using cluster = await pve.connect()
 const node = cluster.node('pve1')
 
 await cluster.api.tasks() // every node, newest first
-await node.tasks({ limit: 50, errors: true, typefilter: 'qmstart' })
-const page = await node.api.tasks.page({ start: 0, limit: 50 }) // with the total count
-console.log(page.total)
+const page = await node.tasks({ start: 0, limit: 50, errors: true, typefilter: 'qmstart' })
+console.log(page.total) // rows matching the filter, before start and limit
 const running = await node.api.tasks.list({ source: 'active' })
-for (const task of running) await node.api.tasks.stop(task.upid)
+for (const task of running.tasks) await node.api.tasks.stop(task.upid)
 ```
 
-A list row is a `TaskListEntry`:
+A node answers one page, `{ tasks, total }`, and each row is a
+`TaskListEntry`:
 
 ```ts
 import pve from 'pve-agent'
@@ -171,21 +171,9 @@ try {
 }
 ```
 
-| Class | `kind` | Raised when | Carries |
-| --- | --- | --- | --- |
-| `PveConfigError` | `config` | A credential or a parameter value is missing or unusable | |
-| `PveConnectionError` | `connection` | DNS, TCP, TLS or a timeout | `url` |
-| `PveAuthError` | `auth` | The API rejected the credentials | `tier` |
-| `PveTierError` | `tier` | The call needs a credential this client does not hold | `required`, `available` |
-| `PvePermissionError` | `permission` | 403 with credentials that were accepted | `method`, `path`, `tier` |
-| `PveNotFoundError` | `not-found` | 404, 501, a path outside the registry, or the 500 PVE sends for a missing guest or config file | `method`, `path` |
-| `PveApiError` | `api` | Any other non-2xx, or a 2xx whose body is not JSON | `status`, `method`, `path`, `errors` |
-| `PveTaskError` | `task` | A worker task failed, or the wait gave up on one | `upid`, `exitStatus`, `timedOut`, `log` |
-| `PveTimeoutError` | `timeout` | A poll gave up: a guest never reached a state, an agent never answered, a screen never appeared, a serial console never printed the text | `what`, `waitedMs` |
-| `GuestCommandError` | `guest-command` | A command inside a guest exited non-zero | `vmid`, `exitCode`, `stdout`, `stderr` |
-| `PvePropertyError` | `property` | A property string does not fit its format | |
-| `PveConsoleError` | `console` | A console transport or protocol failure, or a refused login | |
-| `PveShellError` | `shell` | The root-shell layer failed | `shell` |
+The classes, their `kind` values and the fields each carries are listed once,
+in [ARCHITECTURE.md](../ARCHITECTURE.md#errors). The sections below show how
+to read the ones a script meets most.
 
 Waiting on a task and waiting on a state are different failures.
 `PveTaskError` belongs to a real worker task and names its UPID;
@@ -252,10 +240,9 @@ try {
 
 ### PveNotFoundError
 
-Four different things land here: a 404, a 501, a path that is not in the
-generated registry, and the 500 PVE answers when a guest or a config file
-does not exist. The last one is why `rrddata` on a guest created a minute ago
-throws this instead of an empty list:
+Three different things land here: a 404, a 501, and the 500 PVE answers when
+a guest or a config file does not exist. The last one is why `rrddata` on a
+guest created a minute ago throws this instead of an empty list:
 
 ```ts
 import pve, { PveNotFoundError } from 'pve-agent'
@@ -270,8 +257,9 @@ try {
 }
 ```
 
-A path outside the registry is usually a typo. Send it anyway with
-`{ allowUnknownEndpoint: true }` when it is not.
+A path outside the generated registry is a `PveConfigError`, since it is
+usually a typo. Send it anyway with `{ allowUnknownEndpoint: true }` when it
+is not.
 
 ### PveTaskError
 
@@ -383,7 +371,7 @@ would decide. See [shell.md](shell.md).
 
 ## Retries the library already does
 
-- A ticket in its last quarter hour is renewed before the call, and one 403
+- A ticket in its last quarter hour is renewed before the call, and a 401
   on a ticket call triggers a fresh login and a single retry.
 - A call whose tier decision says `ticket` while only a token is configured
   throws before sending anything.

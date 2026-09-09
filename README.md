@@ -194,7 +194,7 @@ const node = cluster.node('pve1')
 
 await node.status() // uptime, load, memory, kernel, PVE version, boot mode
 await node.api.network.list()
-await node.tasks() // worker tasks, newest first
+await node.tasks() // { tasks, total }, newest first
 const shell = await node.shell // SSH, or termproxy with a root@pam ticket
 await shell.zfs.listPools()
 await shell.systemd.restart('pvestatd')

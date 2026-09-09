@@ -249,12 +249,12 @@ await using cluster = await pve.connect()
 const node = cluster.node('pve1')
 const guest = await cluster.guest(100)
 
-await node.api.firewall.log({ limit: 200 })
-const page = await node.api.firewall.logPage({ start: 0, limit: 100 })
+const page = await node.api.firewall.log({ start: 0, limit: 100 })
 console.log(page.total, page.lines.length)
 await guest.firewall.log({ limit: 100, since: 1_756_000_000 })
 ```
 
-All of them answer `PveLogLine[]`, the same `{ n, t }` rows a task log
-returns. `logPage` adds the total the node reports, for paging. Only rules
-with `log` set appear.
+The lines are `PveLogLine[]`, the same `{ n, t }` rows a task log returns.
+The node log comes as a page, `{ lines, total }`, with the total the node
+reports for paging; a guest log is the rows alone. Only rules with `log` set
+appear.

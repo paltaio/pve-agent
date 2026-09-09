@@ -141,7 +141,7 @@ a root@pam ticket.
 const node = cluster.node('pve1')
 
 await node.status() // uptime, load, memory, kernel, PVE version, boot mode
-await node.tasks() // worker tasks, newest first
+await node.tasks() // { tasks, total }, newest first
 node.api // NodeApi: network, storage, disks, firewall, apt, certificates, services, hardware, scan, tasks, replication, backup
 await node.shell // NodeShell; see the node shell below
 ```
@@ -304,12 +304,12 @@ Every error extends `PveError` and carries `kind`:
 
 | Class | Kind | When |
 | --- | --- | --- |
-| `PveConfigError` | `config` | a credential or a parameter value is missing or unusable |
+| `PveConfigError` | `config` | a credential or a parameter value is missing or unusable, or the path is outside the registry |
 | `PveConnectionError` | `connection` | DNS, TCP, TLS or a request timeout; `url` |
 | `PveAuthError` | `auth` | the API rejected the credentials; `tier` |
 | `PveTierError` | `tier` | the call needs a credential this client does not hold; `required`, `available` |
 | `PvePermissionError` | `permission` | 403 with accepted credentials; `method`, `path`, `tier` |
-| `PveNotFoundError` | `not-found` | 404, an unknown path or a missing guest |
+| `PveNotFoundError` | `not-found` | 404, or a missing guest |
 | `PveApiError` | `api` | any other non-2xx; `status`, `errors` per parameter |
 | `PveTaskError` | `task` | a worker task failed, or is still running after the wait (`timedOut`); `upid`, `exitStatus`, `log` |
 | `PveTimeoutError` | `timeout` | a poll gave up: a run state, the agent, a screen, a guest command; `what`, `waitedMs` |

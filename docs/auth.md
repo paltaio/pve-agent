@@ -206,8 +206,9 @@ await cluster.client.get('/version', undefined, { tier: 'ticket' })
 
 A ticket lasts two hours and renews by sending the old ticket back as the
 password, so a long-running script never re-sends the password. Ticket calls
-attach `CSRFPreventionToken` on writes; token calls never do. One 403 on a
-ticket call triggers a fresh login and a single retry.
+attach `CSRFPreventionToken` on writes; token calls never do. A 401 on a
+ticket call, which is what the API server answers for a ticket it no longer
+verifies, triggers a fresh login and a single retry; a 403 is final.
 
 ```ts
 import pve from 'pve-agent'
