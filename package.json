@@ -6,6 +6,9 @@
 	"repository": "github:paltaio/pve-agent",
 	"files": [
 		"src",
+		"!src/**/*.test.ts",
+		"!src/**/test-support/**",
+		"!src/**/test-support.ts",
 		"schema",
 		"SKILL.md",
 		"install-pve-skill"
