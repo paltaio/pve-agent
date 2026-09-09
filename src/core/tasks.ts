@@ -243,7 +243,12 @@ export async function waitForTask(
 	// not only while the wait sleeps between polls.
 	const requestOptions: RequestOptions = options.signal ? { signal: options.signal } : {}
 
+	const { initialDelayMs, maxDelayMs, onPoll, signal } = options
 	const pollOptions: PollOptions<TaskStatus> = {
+		...(initialDelayMs === undefined ? {} : { initialDelayMs }),
+		...(maxDelayMs === undefined ? {} : { maxDelayMs }),
+		...(onPoll === undefined ? {} : { onPoll }),
+		...(signal === undefined ? {} : { signal }),
 		done: (value) => value.status === 'stopped',
 		onTimeout: (value) => {
 			throw new PveTaskError({
@@ -255,10 +260,6 @@ export async function waitForTask(
 		},
 		timeoutMs,
 	}
-	if (options.initialDelayMs !== undefined) pollOptions.initialDelayMs = options.initialDelayMs
-	if (options.maxDelayMs !== undefined) pollOptions.maxDelayMs = options.maxDelayMs
-	if (options.onPoll !== undefined) pollOptions.onPoll = options.onPoll
-	if (options.signal !== undefined) pollOptions.signal = options.signal
 
 	const status = await pollUntil(() => getTaskStatus(client, upid, requestOptions), pollOptions)
 

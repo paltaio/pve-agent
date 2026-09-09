@@ -45,7 +45,12 @@ export async function waitForRunState(
 	options: WaitForStateOptions = {},
 ): Promise<GuestStatus> {
 	const timeoutMs = options.timeoutMs ?? 5 * 60_000
+	const { initialDelayMs, maxDelayMs, onPoll, signal } = options
 	const pollOptions: PollOptions<GuestStatus> = {
+		...(initialDelayMs === undefined ? {} : { initialDelayMs }),
+		...(maxDelayMs === undefined ? {} : { maxDelayMs }),
+		...(onPoll === undefined ? {} : { onPoll }),
+		...(signal === undefined ? {} : { signal }),
 		done: (status) => status.runState === state,
 		onTimeout: (status) => {
 			throw new PveTimeoutError({
@@ -56,10 +61,6 @@ export async function waitForRunState(
 		},
 		timeoutMs,
 	}
-	if (options.initialDelayMs !== undefined) pollOptions.initialDelayMs = options.initialDelayMs
-	if (options.maxDelayMs !== undefined) pollOptions.maxDelayMs = options.maxDelayMs
-	if (options.onPoll !== undefined) pollOptions.onPoll = options.onPoll
-	if (options.signal !== undefined) pollOptions.signal = options.signal
 	return pollUntil(() => getStatus(client, ref), pollOptions)
 }
 
