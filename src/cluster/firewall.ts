@@ -13,6 +13,7 @@
  */
 
 import type { PveClient } from '../core/client.ts'
+import { PveConfigError } from '../core/errors.ts'
 import { toBoolean, toOptionalNumber, toOptionalString } from '../core/values.ts'
 import type {
 	ClusterFirewallAliasesPostParams,
@@ -146,7 +147,7 @@ export interface FirewallRef {
 
 /**
  * The rules of one collection, such as `/cluster/firewall/rules`,
- * `/nodes/ms01-0160/firewall/rules` or `/cluster/firewall/groups/web`. A
+ * `/nodes/pve1/firewall/rules` or `/cluster/firewall/groups/web`. A
  * rule is addressed as `<collection>/<pos>`.
  */
 export class FirewallRulesApi {
@@ -167,9 +168,7 @@ export class FirewallRulesApi {
 
 	/** One rule by position. Token tier. */
 	async get(pos: number): Promise<FirewallRule> {
-		return normalizeFirewallRule(
-			await this.client.get<Record<string, unknown>>(`${this.path}/${pos}`),
-		)
+		return normalizeFirewallRule(await this.client.get<Record<string, unknown>>(this.rulePath(pos)))
 	}
 
 	/**
@@ -186,12 +185,19 @@ export class FirewallRulesApi {
 	 * `digest` from the list guards against a concurrent edit. Returns nothing.
 	 */
 	async update(pos: number, params: FirewallRuleUpdateParams): Promise<void> {
-		await this.client.put<null>(`${this.path}/${pos}`, params)
+		await this.client.put<null>(this.rulePath(pos), params)
 	}
 
 	/** Remove a rule by position. Returns nothing. */
-	async delete(pos: number, options: { digest?: string } = {}): Promise<void> {
-		await this.client.delete<null>(`${this.path}/${pos}`, options)
+	async delete(pos: number, options: { digest?: string | undefined } = {}): Promise<void> {
+		await this.client.delete<null>(this.rulePath(pos), options)
+	}
+
+	private rulePath(pos: number): string {
+		if (!Number.isInteger(pos) || pos < 0) {
+			throw new PveConfigError(`A rule position is a non-negative integer, got ${pos}`)
+		}
+		return `${this.path}/${pos}`
 	}
 }
 
@@ -261,7 +267,7 @@ export class ClusterFirewallApi {
 		await this.client.put<null>(`/cluster/firewall/aliases/${encodeURIComponent(name)}`, params)
 	}
 
-	async deleteAlias(name: string, options: { digest?: string } = {}): Promise<void> {
+	async deleteAlias(name: string, options: { digest?: string | undefined } = {}): Promise<void> {
 		await this.client.delete<null>(`/cluster/firewall/aliases/${encodeURIComponent(name)}`, options)
 	}
 
@@ -308,7 +314,7 @@ export class ClusterFirewallApi {
 	async deleteIpsetEntry(
 		name: string,
 		cidr: string,
-		options: { digest?: string } = {},
+		options: { digest?: string | undefined } = {},
 	): Promise<void> {
 		await this.client.delete<null>(
 			`/cluster/firewall/ipset/${encodeURIComponent(name)}/${encodeURIComponent(cidr)}`,
