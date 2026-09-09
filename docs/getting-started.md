@@ -2,8 +2,10 @@
 
 ## Install
 
+As a dependency:
+
 ```sh
-bun add pve-agent
+bun add github:paltaio/pve-agent
 ```
 
 Or from a checkout:
