@@ -66,6 +66,10 @@ describe('shJoin', () => {
 	test('quotes each element separately', () => {
 		expect(shJoin(['/bin/sh', '-c', 'echo hi'])).toBe("/bin/sh -c 'echo hi'")
 	})
+
+	test('refuses a command line where an argument vector was expected', () => {
+		expect(() => Reflect.apply(shJoin, undefined, ['restart sshd'])).toThrow(PveShellPolicyError)
+	})
 })
 
 describe('shHeredoc', () => {

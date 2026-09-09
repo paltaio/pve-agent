@@ -34,6 +34,12 @@ export function shQuote(value: string): string {
 
 /** Join an argument vector into a command line, quoting each element. */
 export function shJoin(argv: readonly string[]): string {
+	if (!Array.isArray(argv)) {
+		refuse(
+			String(argv),
+			`shJoin takes an argument vector such as ['restart', 'sshd'], and a ${typeof argv} would reach the shell unquoted`,
+		)
+	}
 	return argv.map(shQuote).join(' ')
 }
 
