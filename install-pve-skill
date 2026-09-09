@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# Installs the pve-agent skill into ~/.claude/skills, ~/.codex/skills and ~/.opencode/skills.
+# Usage: PVE_HOST=... PVE_TOKEN_ID=... PVE_TOKEN_SECRET=... ./install-pve-skill
+set -euo pipefail
+
+repo_url="https://github.com/paltaio/pve-agent.git"
+repo_ref="${PVE_SKILL_REF:-main}"
+skill_name="pve-agent"
+work_dir=""
+
+for tool in bun git; do
+	if ! command -v "$tool" >/dev/null 2>&1; then
+		echo "$tool is required and was not found on PATH" >&2
+		exit 1
+	fi
+done
+
+cleanup() {
+	if [[ -n "$work_dir" ]]; then
+		rm -rf "$work_dir"
+	fi
+}
+trap cleanup EXIT
+
+targets=()
+for root in "$HOME/.claude/skills" "$HOME/.codex/skills" "$HOME/.opencode/skills"; do
+	if [[ -d "$root" ]]; then
+		targets+=("$root/$skill_name")
+	fi
+done
+if [[ ${#targets[@]} -eq 0 ]]; then
+	echo "no skills directory found: create ~/.claude/skills, ~/.codex/skills or ~/.opencode/skills" >&2
+	exit 1
+fi
+
+if [[ -n "${PVE_SKILL_SOURCE_DIR:-}" ]]; then
+	repo_dir="$(cd "$PVE_SKILL_SOURCE_DIR" && pwd -P)"
+else
+	work_dir="$(mktemp -d)"
+	repo_dir="$work_dir/repo"
+	git clone --quiet --depth 1 --branch "$repo_ref" "$repo_url" "$repo_dir"
+fi
+
+for entry in SKILL.md package.json bun.lock LICENSE README.md; do
+	if [[ ! -f "$repo_dir/$entry" ]]; then
+		echo "$entry not found in $repo_dir" >&2
+		exit 1
+	fi
+done
+for entry in src schema; do
+	if [[ ! -d "$repo_dir/$entry" ]]; then
+		echo "$entry/ not found in $repo_dir" >&2
+		exit 1
+	fi
+done
+
+need_env=0
+for target in "${targets[@]}"; do
+	if [[ ! -f "$target/pve.env" || "${PVE_SKILL_OVERWRITE_ENV:-0}" == "1" ]]; then
+		need_env=1
+	fi
+done
+
+ask() {
+	local name="$1" prompt="$2" secret="${3:-}"
+	local value="${!name:-}"
+	if [[ -z "$value" && -t 0 ]]; then
+		if [[ -n "$secret" ]]; then
+			read -r -s -p "$prompt: " value
+			echo >&2
+		else
+			read -r -p "$prompt: " value
+		fi
+	fi
+	printf '%s' "$value"
+}
+
+env_line() {
+	printf "export %s='%s'\n" "$1" "${2//\'/\'\\\'\'}"
+}
+
+env_body=""
+if [[ "$need_env" -eq 1 ]]; then
+	pve_host="$(ask PVE_HOST "PVE host")"
+	if [[ -z "$pve_host" ]]; then
+		echo "PVE_HOST is required" >&2
+		exit 2
+	fi
+	pve_port="$(ask PVE_PORT "PVE port (blank for 8006)")"
+	pve_user="$(ask PVE_USER "PVE user, such as root@pam (blank for token only)")"
+	pve_password=""
+	if [[ -n "$pve_user" ]]; then
+		pve_password="$(ask PVE_PASSWORD "PVE password for $pve_user" secret)"
+	fi
+	pve_token_id="$(ask PVE_TOKEN_ID "PVE token id, such as user@realm!name (blank for none)")"
+	pve_token_secret=""
+	if [[ -n "$pve_token_id" ]]; then
+		pve_token_secret="$(ask PVE_TOKEN_SECRET "PVE token secret" secret)"
+	fi
+	pve_verify_ssl="$(ask PVE_VERIFY_SSL "Verify the TLS certificate, 1 or 0 (blank for 1)")"
+	pve_node="$(ask PVE_NODE "Default node (blank for none)")"
+	if [[ -z "$pve_password" && -z "$pve_token_secret" ]]; then
+		echo "set PVE_USER with PVE_PASSWORD, or PVE_TOKEN_ID with PVE_TOKEN_SECRET" >&2
+		exit 2
+	fi
+	env_body="$(
+		env_line PVE_HOST "$pve_host"
+		[[ -n "$pve_port" ]] && env_line PVE_PORT "$pve_port"
+		[[ -n "$pve_user" ]] && env_line PVE_USER "$pve_user"
+		[[ -n "$pve_password" ]] && env_line PVE_PASSWORD "$pve_password"
+		[[ -n "$pve_token_id" ]] && env_line PVE_TOKEN_ID "$pve_token_id"
+		[[ -n "$pve_token_secret" ]] && env_line PVE_TOKEN_SECRET "$pve_token_secret"
+		[[ -n "$pve_verify_ssl" ]] && env_line PVE_VERIFY_SSL "$pve_verify_ssl"
+		[[ -n "$pve_node" ]] && env_line PVE_NODE "$pve_node"
+		true
+	)"
+fi
+
+first_modules=""
+for target in "${targets[@]}"; do
+	staging="$target.tmp.$$"
+	rm -rf "$staging"
+	mkdir -p "$staging"
+	cp "$repo_dir/package.json" "$repo_dir/bun.lock" "$repo_dir/LICENSE" "$repo_dir/README.md" "$staging/"
+	cp -R "$repo_dir/src" "$staging/src"
+	cp -R "$repo_dir/schema" "$staging/schema"
+	sed "s|<skill-dir>|$target|g" "$repo_dir/SKILL.md" > "$staging/SKILL.md"
+
+	if [[ -n "$first_modules" ]]; then
+		cp -R "$first_modules" "$staging/node_modules"
+	else
+		(cd "$staging" && bun install --production --frozen-lockfile >/dev/null)
+		first_modules="$target/node_modules"
+	fi
+
+	if [[ -f "$target/pve.env" && "${PVE_SKILL_OVERWRITE_ENV:-0}" != "1" ]]; then
+		cp -p "$target/pve.env" "$staging/pve.env"
+	else
+		(umask 077 && printf '%s\n' "$env_body" > "$staging/pve.env")
+	fi
+	chmod 600 "$staging/pve.env"
+
+	rm -rf "$target"
+	mv "$staging" "$target"
+done
+
+echo "pve-agent skill installed in:"
+for target in "${targets[@]}"; do
+	echo "  $target"
+done
