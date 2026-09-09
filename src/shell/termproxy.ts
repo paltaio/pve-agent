@@ -8,14 +8,11 @@
  * line discipline, and a command is wrapped so its stdout, stderr and exit
  * code come back between markers the transport parses. stderr goes through a
  * temporary file on the node that the login shell removes when it exits.
- *
- * Frames on the websocket: `user:ticket\n` once to log in, then
- * `0:<bytes>:<data>` for input, `1:<cols>:<rows>:` for a resize and `2` as a
- * keepalive.
  */
 
 import type { PveClient } from '../core/client.ts'
 import { consoleAuthHeaders } from '../console/proxy.ts'
+import { KEEPALIVE_FRAME, loginFrame, resizeFrame, sendInput } from '../console/pty.ts'
 import { openWebSocket, type ConsoleSocket, type SocketFactory } from '../console/socket.ts'
 import type { PveShellError } from '../core/errors.ts'
 import {
@@ -56,7 +53,6 @@ const DEFAULT_MAX_COMMAND_BYTES = 4096
 const DEFAULT_MAX_TRANSFER_BYTES = 1024 * 1024
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 const KEEPALIVE_MS = 30_000
-const SEND_CHUNK_BYTES = 256
 const APPEND_CHUNK_CHARS = 1024
 
 /** Marker delimiters: the bytes the parser matches, and what printf is given. */
@@ -155,11 +151,11 @@ export class TermproxyTransport implements ShellTransport {
 				})
 			}
 
-			socket.send(`${proxy.user}:${proxy.ticket}\n`)
+			socket.send(loginFrame(proxy.user, proxy.ticket))
 			await this.waitFor(() => this.buffer.includes('OK') || undefined, connectTimeoutMs, 'login')
 			this.buffer = ''
-			socket.send('1:200:50:')
-			this.keepalive = setInterval(() => this.socket?.send('2'), KEEPALIVE_MS)
+			socket.send(resizeFrame(200, 50))
+			this.keepalive = setInterval(() => this.socket?.send(KEEPALIVE_FRAME), KEEPALIVE_MS)
 			this.keepalive.unref()
 
 			// The marker is assembled from variables so the shell's own echo of a
@@ -229,7 +225,7 @@ export class TermproxyTransport implements ShellTransport {
 			parsed = await this.waitFor(() => this.parse(), timeoutMs, command)
 		} catch (error) {
 			// Interrupt the remote command so the session stays usable.
-			if (socket.open) socket.send(`0:1:${INTERRUPT}`)
+			if (socket.open) sendInput(socket, INTERRUPT)
 			throw error
 		}
 
@@ -378,12 +374,7 @@ export class TermproxyTransport implements ShellTransport {
 	}
 
 	private sendLine(line: string): void {
-		const socket = this.requireSocket()
-		const payload = Buffer.from(`${line}\n`, 'utf8')
-		for (let offset = 0; offset < payload.length; offset += SEND_CHUNK_BYTES) {
-			const chunk = payload.subarray(offset, offset + SEND_CHUNK_BYTES)
-			socket.send(Buffer.concat([Buffer.from(`0:${chunk.length}:`, 'ascii'), chunk]))
-		}
+		sendInput(this.requireSocket(), `${line}\n`)
 	}
 
 	/**

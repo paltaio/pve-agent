@@ -5,6 +5,7 @@ import {
 	consoleTier,
 	consoleWebSocketUrl,
 	guestBasePath,
+	requestTermProxy,
 	requestVncProxy,
 } from './proxy.ts'
 
@@ -105,5 +106,57 @@ describe('console credentials', () => {
 		expect(await consoleAuthHeaders(mock.client.auth)).toEqual({
 			Authorization: 'PVEAPIToken=agents@pve!ci=secret',
 		})
+	})
+})
+
+describe('requestTermProxy', () => {
+	test('names the serial port of a VM and reads the ticket back', async () => {
+		const mock = mockClient()
+		mock.reply({
+			data: { port: 5901, ticket: 'PVEVNC:TICKET', user: 'root@pam', upid: 'UPID:ms02:x' },
+		})
+
+		const ticket = await requestTermProxy(
+			mock.client,
+			{ node: 'ms02-0078', vmid: 101 },
+			{ serial: 'serial0' },
+		)
+
+		const call = mock.calls()[0]
+		expect(call?.method).toBe('POST')
+		expect(call?.path).toBe('/nodes/ms02-0078/qemu/101/termproxy')
+		expect(call && formObject(call)).toEqual({ serial: 'serial0' })
+		expect(call?.headers['cookie']).toBe('PVEAuthCookie=PVE%3Aroot%40pam%3ATICKET')
+		expect(ticket).toEqual({
+			port: '5901',
+			ticket: 'PVEVNC:TICKET',
+			user: 'root@pam',
+			upid: 'UPID:ms02:x',
+		})
+	})
+
+	test('a container gets no parameters and a token goes in the header', async () => {
+		const mock = mockClient({ ticket: false })
+		mock.reply({ data: { port: '5902', ticket: 'PVEVNC:T', user: 'api@pve!tok' } })
+
+		const ticket = await requestTermProxy(mock.client, {
+			node: 'ms02-0078',
+			vmid: 110,
+			type: 'lxc',
+		})
+
+		const call = mock.calls()[0]
+		expect(call?.path).toBe('/nodes/ms02-0078/lxc/110/termproxy')
+		expect(call?.body).toBe('')
+		expect(call?.headers['authorization']).toMatch(/^PVEAPIToken=/)
+		expect(ticket).toEqual({ port: '5902', ticket: 'PVEVNC:T', user: 'api@pve!tok' })
+	})
+
+	test('an answer without a ticket is a console error', async () => {
+		const mock = mockClient()
+		mock.reply({ data: { port: '5900', user: 'root@pam' } })
+		await expect(requestTermProxy(mock.client, { node: 'ms02-0078', vmid: 101 })).rejects.toThrow(
+			/termproxy answered without a 'ticket' field/,
+		)
 	})
 })

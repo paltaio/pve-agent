@@ -21,6 +21,7 @@
 		"generate": "bun run scripts/generate-api.ts"
 	},
 	"dependencies": {
+		"@xterm/headless": "6.0.0",
 		"jpeg-js": "0.4.4"
 	},
 	"devDependencies": {

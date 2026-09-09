@@ -11,9 +11,29 @@
 import type { PveAuth } from '../core/auth.ts'
 import type { PveClient } from '../core/client.ts'
 import { PveConsoleError, type AuthTier } from '../core/errors.ts'
+import type { NodesQemuTermproxyPostParams } from '../generated/types.ts'
 import type { GuestRef, GuestType } from '../guest/types.ts'
 
 export type { GuestRef, GuestType }
+
+/** A VM serial port a terminal proxy can attach to. */
+export type SerialPort = NonNullable<NodesQemuTermproxyPostParams['serial']>
+
+/** What a node hands back when it spawns a terminal proxy worker. */
+export interface TermProxyTicket {
+	/** TCP port of the proxy worker, as the node reports it. */
+	port: string
+	/** Goes in the vncwebsocket query string and in the login frame. */
+	ticket: string
+	/** The user the ticket is tied to; the login frame names it. */
+	user: string
+	upid?: string
+}
+
+export interface TermProxyParams {
+	/** The VM serial port to attach. Without it the proxy opens the VM's display. */
+	serial?: SerialPort
+}
 
 /** What a node hands back when it spawns a VNC proxy worker. */
 export interface VncProxyTicket {
@@ -47,12 +67,35 @@ export async function requestVncProxy(client: PveClient, guest: GuestRef): Promi
 		},
 	)
 	const ticket: VncProxyTicket = {
-		port: readString(raw, 'port'),
-		ticket: readString(raw, 'ticket'),
+		port: readString(raw, 'port', 'vncproxy'),
+		ticket: readString(raw, 'ticket', 'vncproxy'),
 		user: typeof raw['user'] === 'string' ? raw['user'] : '',
 	}
 	if (typeof raw['password'] === 'string' && raw['password'].length > 0) {
 		ticket.password = raw['password']
+	}
+	if (typeof raw['upid'] === 'string') ticket.upid = raw['upid']
+	return ticket
+}
+
+/**
+ * Spawns a terminal proxy worker for a guest. Its stream runs over
+ * vncwebsocket like the VNC one, with the framing `pty.ts` describes.
+ */
+export async function requestTermProxy(
+	client: PveClient,
+	guest: GuestRef,
+	params: TermProxyParams = {},
+): Promise<TermProxyTicket> {
+	const raw = await client.post<Record<string, unknown>>(
+		`${guestBasePath(guest)}/termproxy`,
+		params,
+		{ tier: consoleTier(client.auth) },
+	)
+	const ticket: TermProxyTicket = {
+		port: readString(raw, 'port', 'termproxy'),
+		ticket: readString(raw, 'ticket', 'termproxy'),
+		user: readString(raw, 'user', 'termproxy'),
 	}
 	if (typeof raw['upid'] === 'string') ticket.upid = raw['upid']
 	return ticket
@@ -88,9 +131,9 @@ export async function consoleAuthHeaders(auth: PveAuth): Promise<Record<string, 
 	return { Authorization: auth.tokenHeader() }
 }
 
-function readString(raw: Record<string, unknown>, key: string): string {
+function readString(raw: Record<string, unknown>, key: string, endpoint: string): string {
 	const value = raw[key]
 	if (typeof value === 'string') return value
 	if (typeof value === 'number') return String(value)
-	throw new PveConsoleError(`vncproxy answered without a '${key}' field`)
+	throw new PveConsoleError(`${endpoint} answered without a '${key}' field`)
 }

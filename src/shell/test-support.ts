@@ -69,6 +69,8 @@ export type PtyReply = FakeReply | 'hang' | undefined
 export interface FakePtyOptions {
 	/** Answers a decoded command. The probe is answered by the pty itself; undefined stands for no output. */
 	reply?: (command: string, input: string | undefined) => PtyReply
+	/** Answers a line as typed, before any wrapper parsing. What it returns is printed. */
+	onLine?: (line: string) => string | undefined
 	/** Text the shell prints once logged in. One ending in `login:` swallows every line typed at it. */
 	banner?: string
 	/** Echo typed lines back, as a pty with echo on does. Defaults to true. */
@@ -151,19 +153,25 @@ export class FakePty implements ConsoleSocket {
 		}
 	}
 
+	/** Ends a line the way a tty does: on a carriage return or a newline. */
 	private feed(text: string): void {
 		this.line += text
 		for (;;) {
-			const index = this.line.indexOf('\n')
-			if (index === -1) break
-			const line = this.line.slice(0, index)
-			this.line = this.line.slice(index + 1)
+			const end = /\r\n|[\r\n]/.exec(this.line)
+			if (end === null) break
+			const line = this.line.slice(0, end.index)
+			this.line = this.line.slice(end.index + end[0].length)
 			this.handleLine(line)
 		}
 	}
 
 	private handleLine(line: string): void {
 		if (this.options.echo !== false) this.emit(`${line}\r\n`)
+		if (this.options.onLine !== undefined) {
+			const answer = this.options.onLine(line)
+			if (answer !== undefined) this.emit(answer)
+			return
+		}
 		if (/login:\s*$/.test(this.options.banner ?? '')) {
 			this.emit('Password: ')
 			return
