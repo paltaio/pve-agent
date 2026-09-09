@@ -60,9 +60,9 @@ describe('NodeApi', () => {
 			description: 'edge node',
 			'startall-onboot-delay': '30',
 		})
-		await node.setDns({ search: 'lan', dns1: '192.168.80.1' })
+		await node.setDns({ search: 'lan', dns1: '192.0.2.1' })
 		expect([mock.last().method, mock.last().path]).toEqual(['PUT', '/nodes/ms01-0160/dns'])
-		expect(formObject(mock.last())).toEqual({ search: 'lan', dns1: '192.168.80.1' })
+		expect(formObject(mock.last())).toEqual({ search: 'lan', dns1: '192.0.2.1' })
 		await node.setTimezone('UTC')
 		expect([mock.last().method, mock.last().path]).toEqual(['PUT', '/nodes/ms01-0160/time'])
 		expect(formObject(mock.last())).toEqual({ timezone: 'UTC' })

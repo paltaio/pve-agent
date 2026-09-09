@@ -199,8 +199,8 @@ describe('the screen', () => {
 
 	test('a multibyte character split across frames renders once', async () => {
 		const { serial, socket } = await connected({}, { splitBytes: 3 })
-		socket.emit('café ok')
-		expect(await serial.waitForText('ok')).toBe('café ok')
+		socket.emit('caf\u00e9 ok')
+		expect(await serial.waitForText('ok')).toBe('caf\u00e9 ok')
 	})
 
 	test('data carries the decoded chunk', async () => {

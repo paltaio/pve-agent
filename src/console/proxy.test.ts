@@ -74,13 +74,13 @@ describe('requestVncProxy', () => {
 describe('consoleWebSocketUrl', () => {
 	test('escapes the ticket and keeps the guest type', () => {
 		const url = consoleWebSocketUrl(
-			'https://192.168.80.21:8006',
+			'https://192.0.2.21:8006',
 			{ node: 'ms02-0078', vmid: 110, type: 'lxc' },
 			'5900',
 			'PVEVNC:68B/AA==::abc+def/ghi',
 		)
 		expect(url).toBe(
-			'wss://192.168.80.21:8006/api2/json/nodes/ms02-0078/lxc/110/vncwebsocket' +
+			'wss://192.0.2.21:8006/api2/json/nodes/ms02-0078/lxc/110/vncwebsocket' +
 				'?port=5900&vncticket=PVEVNC%3A68B%2FAA%3D%3D%3A%3Aabc%2Bdef%2Fghi',
 		)
 	})

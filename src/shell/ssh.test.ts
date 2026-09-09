@@ -9,9 +9,9 @@ const decode = (bytes: Uint8Array | undefined): string => new TextDecoder().deco
 
 describe('argument vector', () => {
 	test('carries batch mode, the host key policy, the connect timeout and the command', () => {
-		const transport = new SshTransport({ host: '192.168.80.21', node: 'ms01-0160' })
+		const transport = new SshTransport({ host: '192.0.2.21', node: 'ms01-0160' })
 		expect(transport.node).toBe('ms01-0160')
-		expect(transport.description).toBe('ssh root@192.168.80.21')
+		expect(transport.description).toBe('ssh root@192.0.2.21')
 		expect(transport.argv('zpool status')).toEqual([
 			'ssh',
 			'-o',
@@ -21,7 +21,7 @@ describe('argument vector', () => {
 			'-o',
 			'ConnectTimeout=10',
 			'--',
-			'root@192.168.80.21',
+			'root@192.0.2.21',
 			'zpool status',
 		])
 	})

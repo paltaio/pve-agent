@@ -177,8 +177,8 @@ describe('transport selection', () => {
 	test('ssh settings reach the transport', async () => {
 		const shell = await NodeShell.open({
 			node: 'ms01-0160',
-			ssh: { host: '192.168.80.21', user: 'admin', port: 2222, spawn: sshAnswering(0) },
+			ssh: { host: '192.0.2.21', user: 'admin', port: 2222, spawn: sshAnswering(0) },
 		})
-		expect(shell.transport.description).toBe('ssh admin@192.168.80.21 -p 2222')
+		expect(shell.transport.description).toBe('ssh admin@192.0.2.21 -p 2222')
 	})
 })

@@ -85,9 +85,9 @@ describe('options, groups, aliases, ipsets', () => {
 			'/cluster/firewall/groups/web',
 		])
 
-		await firewall.createAlias({ name: 'lan', cidr: '192.168.80.0/24' })
+		await firewall.createAlias({ name: 'lan', cidr: '192.0.2.0/24' })
 		expect(mock.last().path).toBe('/cluster/firewall/aliases')
-		expect(formObject(mock.last())).toEqual({ name: 'lan', cidr: '192.168.80.0/24' })
+		expect(formObject(mock.last())).toEqual({ name: 'lan', cidr: '192.0.2.0/24' })
 		await firewall.updateAlias('lan', { cidr: '192.168.81.0/24', rename: 'lan2' })
 		expect(mock.last().path).toBe('/cluster/firewall/aliases/lan')
 		expect(formObject(mock.last())).toEqual({ cidr: '192.168.81.0/24', rename: 'lan2' })

@@ -9,7 +9,7 @@ describe('termproxy frames', () => {
 
 	test('an input frame carries the byte length, not the character count', () => {
 		expect(inputFrames('ls\n').map(String)).toEqual(['0:3:ls\n'])
-		expect(inputFrames('café').map(String)).toEqual(['0:5:café'])
+		expect(inputFrames('caf\u00e9').map(String)).toEqual(['0:5:caf\u00e9'])
 		expect(inputFrames('')).toEqual([])
 	})
 

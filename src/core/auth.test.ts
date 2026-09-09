@@ -57,7 +57,7 @@ describe('loadCredentials', () => {
 			[
 				'# a comment',
 				'',
-				"export PVE_HOST='192.168.80.21'",
+				"export PVE_HOST='192.0.2.21'",
 				'export PVE_USER="agents@pve"',
 				'PVE_PASSWORD=plain',
 				"export PVE_VERIFY_SSL='false'",
@@ -67,7 +67,7 @@ describe('loadCredentials', () => {
 			].join('\n'),
 		)
 		const credentials = loadCredentials({ envFile: path })
-		expect(credentials.connection).toEqual({ host: '192.168.80.21', port: 8006, verifySsl: false })
+		expect(credentials.connection).toEqual({ host: '192.0.2.21', port: 8006, verifySsl: false })
 		expect(credentials.ticket).toEqual({ username: 'agents@pve', password: 'plain' })
 		expect(credentials.token).toEqual({ id: 'agents@pve!ci', secret: 'a"b' })
 	})
