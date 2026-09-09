@@ -5,13 +5,16 @@
     "": {
       "name": "pve-agent",
       "dependencies": {
-        "@xterm/headless": "6.0.0",
-        "jpeg-js": "0.4.4",
+        "@xterm/headless": "^6.0.0",
+        "jpeg-js": "^0.4.4",
       },
       "devDependencies": {
         "@types/bun": "1.4.2",
         "oxfmt": "0.67.0",
         "typescript": "7.0.2",
+      },
+      "peerDependencies": {
+        "@types/bun": ">=1.4.2",
       },
     },
   },

@@ -2,6 +2,17 @@
 	"name": "pve-agent",
 	"version": "0.1.0",
 	"description": "TypeScript library for driving a Proxmox VE cluster from Bun",
+	"keywords": [
+		"bun",
+		"lxc",
+		"proxmox",
+		"pve",
+		"qemu",
+		"qemu-guest-agent",
+		"serial-console",
+		"vnc",
+		"zfs"
+	],
 	"license": "Apache-2.0",
 	"repository": "github:paltaio/pve-agent",
 	"files": [
@@ -9,11 +20,11 @@
 		"!src/**/*.test.ts",
 		"!src/**/test-support/**",
 		"!src/**/test-support.ts",
-		"schema",
-		"SKILL.md",
-		"install-pve-skill"
+		"README.md",
+		"LICENSE"
 	],
 	"type": "module",
+	"sideEffects": false,
 	"exports": {
 		".": "./src/index.ts"
 	},
@@ -26,12 +37,18 @@
 		"generate": "bun run scripts/generate-api.ts"
 	},
 	"dependencies": {
-		"@xterm/headless": "6.0.0",
-		"jpeg-js": "0.4.4"
+		"@xterm/headless": "^6.0.0",
+		"jpeg-js": "^0.4.4"
 	},
 	"devDependencies": {
 		"@types/bun": "1.4.2",
 		"oxfmt": "0.67.0",
 		"typescript": "7.0.2"
+	},
+	"peerDependencies": {
+		"@types/bun": ">=1.4.2"
+	},
+	"engines": {
+		"bun": ">=1.4"
 	}
 }
