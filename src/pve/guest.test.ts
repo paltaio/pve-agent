@@ -55,6 +55,25 @@ describe('lifecycle calls wait for the task', () => {
 		])
 	})
 
+	test('a snapshot call that lost the config lock is posted again too', async () => {
+		const { cluster, reply, calls } = clusterFixture({ node: 'ms01-0160' })
+		const locked = {
+			status: 'stopped',
+			exitstatus: "can't lock file '/var/lock/qemu-server/lock-9000.conf' - got timeout",
+		}
+		reply({ data: UPID })
+		reply({ data: locked })
+		reply({ data: [{ n: 1, t: locked.exitstatus }] })
+		taskDone(reply)
+		const status = await cluster.vm(9000).deleteSnapshot('before')
+		expect(status.exitStatus).toBe('OK')
+		const deletes = calls().filter((call) => call.method === 'DELETE')
+		expect(deletes.map((call) => call.path)).toEqual([
+			`${VM}/snapshot/before`,
+			`${VM}/snapshot/before`,
+		])
+	})
+
 	test('any other failure is thrown after one attempt', async () => {
 		const { cluster, reply, calls } = clusterFixture({ node: 'ms01-0160' })
 		reply({ data: UPID })

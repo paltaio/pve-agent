@@ -126,12 +126,12 @@ abstract class PveGuestBase {
 
 	/** Restores the guest to a snapshot and waits for the task. Needs VM.Snapshot.Rollback. */
 	rollback(name: string, options?: SnapshotRollbackOptions): Promise<TaskStatus> {
-		return this.runTask(this.api.snapshots.rollback(name, options))
+		return this.retryOnLock(() => this.api.snapshots.rollback(name, options))
 	}
 
 	/** Deletes a snapshot and waits for the task. Needs VM.Snapshot. */
 	deleteSnapshot(name: string, options?: SnapshotDeleteOptions): Promise<TaskStatus> {
-		return this.runTask(this.api.snapshots.delete(name, options))
+		return this.retryOnLock(() => this.api.snapshots.delete(name, options))
 	}
 
 	/** The `description` field of the config, which the web UI shows as notes. */
@@ -162,7 +162,9 @@ abstract class PveGuestBase {
 	 * lock before it changes anything, so a task that lost it did nothing.
 	 * After a stop, qmeventd's `qm cleanup` holds it for up to 30 s once a
 	 * QEMU process with the same vmid is running again, which a delete and
-	 * recreate of one vmid runs into on the next power call.
+	 * recreate of one vmid runs into on the next power call. A rollback that
+	 * resumes saved RAM holds it past the end of its own task while QEMU
+	 * loads the state, which the next snapshot call runs into.
 	 */
 	protected async retryOnLock(call: () => Promise<string>): Promise<TaskStatus> {
 		const attempt = await pollUntil<Attempt>(
@@ -285,7 +287,7 @@ export class PveVm extends PveGuestBase {
 
 	/** Takes a snapshot and waits for the task. `vmstate: true` also saves RAM. Needs VM.Snapshot. */
 	snapshot(name: string, params?: Omit<QemuSnapshotCreateParams, 'snapname'>): Promise<TaskStatus> {
-		return this.runTask(this.api.snapshots.create(name, params))
+		return this.retryOnLock(() => this.api.snapshots.create(name, params))
 	}
 
 	/** Copies the VM to a new vmid and waits for the task. Needs VM.Clone. */
@@ -396,7 +398,7 @@ export class PveContainer extends PveGuestBase {
 
 	/** Takes a snapshot and waits for the task. Needs VM.Snapshot. */
 	snapshot(name: string, params?: Omit<LxcSnapshotCreateParams, 'snapname'>): Promise<TaskStatus> {
-		return this.runTask(this.api.snapshots.create(name, params))
+		return this.retryOnLock(() => this.api.snapshots.create(name, params))
 	}
 
 	/** Copies the container to a new vmid and waits for the task. Needs VM.Clone. */
