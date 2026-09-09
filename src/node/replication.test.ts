@@ -41,7 +41,7 @@ describe('NodeReplicationApi', () => {
 		expect(job?.raw['fail_count']).toBe(2)
 	})
 
-	test('status, log, logPage and runNow address one job', async () => {
+	test('status, log and runNow address one job', async () => {
 		const mock = mockClient()
 		const replication = new NodeReplicationApi(mock.client, 'ms01-0160')
 
