@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # Installs the pve-agent skill for the agent CLIs found on this machine.
 #
-# Usage, with the credentials in a pve.env file:
-#   set -a; . ./pve.env; set +a
-#   ./install-pve-skill
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/paltaio/pve-agent/main/install-pve-skill | bash
 #
-# Run from a checkout it installs that checkout; run from anywhere else it
-# clones the repository. Missing credentials are asked for on the terminal;
-# without one, PVE_HOST and a credential pair are required in the environment.
+# Run inside a checkout it installs that checkout; run anywhere else it clones
+# the repository. Missing credentials are asked for on the terminal; without
+# one, PVE_HOST and a credential pair are required in the environment.
 # A CLI counts as installed when its binary is on PATH or its config directory
 # exists. PVE_SKILL_TARGETS=claude,codex,/some/skills picks the targets by name
 # or skills directory; PVE_SKILL_LIST=1 prints the targets and exits.
@@ -127,15 +126,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 if [[ -n "${PVE_SKILL_SOURCE_DIR:-}" ]]; then
 	repo_dir="$(cd "$PVE_SKILL_SOURCE_DIR" && pwd -P)"
-elif [[ -f "$script_dir/SKILL.md" && -d "$script_dir/src" ]]; then
-	repo_dir="$script_dir"
+elif [[ -f "$PWD/SKILL.md" && -f "$PWD/install-pve-skill" && -d "$PWD/src" ]]; then
+	repo_dir="$PWD"
 else
 	work_dir="$(mktemp -d)"
 	repo_dir="$work_dir/repo"
-	git clone --quiet --depth 1 --branch "$repo_ref" "$repo_url" "$repo_dir"
+	git clone --quiet --depth 1 --branch "$repo_ref" "$repo_url" "$repo_dir" </dev/null
 fi
 
 for entry in SKILL.md package.json bun.lock LICENSE README.md; do
@@ -185,8 +183,12 @@ env_line() {
 env_body=""
 if [[ "$need_env" -eq 1 ]]; then
 	pve_host="$(ask PVE_HOST "PVE host")"
+	if [[ -z "$pve_host" && -z "$tty_in" ]]; then
+		echo "no terminal to ask on; set PVE_HOST and either PVE_USER with PVE_PASSWORD or PVE_TOKEN_ID with PVE_TOKEN_SECRET in the environment" >&2
+		exit 2
+	fi
 	if [[ -z "$pve_host" ]]; then
-		echo "PVE_HOST is required; without a terminal, set it in the environment" >&2
+		echo "PVE_HOST is required" >&2
 		exit 2
 	fi
 	pve_port="$(ask PVE_PORT "PVE port (blank for 8006)")"
@@ -234,7 +236,7 @@ for target in "${targets[@]}"; do
 	if [[ -n "$first_modules" ]]; then
 		cp -R "$first_modules" "$staging/node_modules"
 	else
-		(cd "$staging" && bun install --production --frozen-lockfile >/dev/null)
+		(cd "$staging" && bun install --production --frozen-lockfile >/dev/null </dev/null)
 	fi
 
 	if [[ -f "$target/pve.env" && "${PVE_SKILL_OVERWRITE_ENV:-0}" != "1" ]]; then
