@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { PveConnectionError } from './errors.ts'
+import { PveApiError, PveConnectionError } from './errors.ts'
 import { HttpClient } from './http.ts'
 
 interface Seen {
@@ -134,7 +134,13 @@ describe('HttpClient responses', () => {
 		expect(resp.headers.get('x-reason')).toBe('denied')
 		expect(await resp.text()).toBe('nope')
 		expect(await resp.text()).toBe('nope')
-		await expect(resp.json()).rejects.toThrow(SyntaxError)
+		const failure = await resp.json().catch((error: unknown) => error)
+		expect(failure).toBeInstanceOf(PveApiError)
+		if (failure instanceof PveApiError) {
+			expect(failure.status).toBe(403)
+			expect(failure.path).toBe('/status')
+			expect(failure.message).toContain('not JSON: nope')
+		}
 		http.close()
 	})
 
@@ -156,16 +162,17 @@ describe('HttpClient failures', () => {
 		http.close()
 	})
 
-	test('a refused connection becomes a PveConnectionError carrying the url', async () => {
+	test('a refused connection becomes a PveConnectionError carrying the url without its query', async () => {
 		const idle = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response('') })
 		const url = `${idle.url.origin}/api2/json/version`
 		await idle.stop(true)
 
 		const http = new HttpClient()
-		const error = await http.request(url).catch((e: unknown) => e)
+		const error = await http.request(`${url}?password=hunter2`).catch((e: unknown) => e)
 		expect(error).toBeInstanceOf(PveConnectionError)
 		if (!(error instanceof PveConnectionError)) return
 		expect(error.url).toBe(url)
+		expect(error.message).not.toContain('hunter2')
 		expect(error.cause).toBeDefined()
 		http.close()
 	})

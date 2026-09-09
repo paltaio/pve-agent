@@ -40,18 +40,24 @@ export class PveConfigError extends PveError {
 	}
 }
 
-/** The request never reached the API: DNS, TCP, TLS, or timeout. */
+/**
+ * The request never reached the API: DNS, TCP, TLS, or timeout.
+ *
+ * `url` carries no query string: a GET or DELETE puts its parameters there,
+ * and some of those are passwords.
+ */
 export class PveConnectionError extends PveError {
 	readonly url: string
 
 	constructor(url: string, cause: unknown) {
 		const detail = cause instanceof Error ? cause.message : String(cause)
+		const shown = url.split('?', 1)[0] ?? url
 		super(
 			'connection',
-			`Cannot reach ${url}: ${detail}. Check PVE_HOST/PVE_PORT, that the node is up, and PVE_VERIFY_SSL if the node uses a self-signed certificate.`,
+			`Cannot reach ${shown}: ${detail}. Check PVE_HOST/PVE_PORT, that the node is up, and PVE_VERIFY_SSL if the node uses a self-signed certificate.`,
 			{ cause },
 		)
-		this.url = url
+		this.url = shown
 	}
 }
 

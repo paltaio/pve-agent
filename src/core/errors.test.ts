@@ -77,6 +77,16 @@ describe('PveConnectionError', () => {
 	test('stringifies a non-Error cause', () => {
 		expect(new PveConnectionError('https://pve:8006', 'timeout').message).toContain(': timeout.')
 	})
+
+	test('drops the query string, which can carry a password', () => {
+		const error = new PveConnectionError(
+			'https://pve:8006/api2/json/nodes/pve1/scan/cifs?server=nas&password=hunter2',
+			new Error('ECONNREFUSED'),
+		)
+		expect(error.url).toBe('https://pve:8006/api2/json/nodes/pve1/scan/cifs')
+		expect(error.message).not.toContain('hunter2')
+		expect(error.message).toContain('Cannot reach https://pve:8006/api2/json/nodes/pve1/scan/cifs:')
+	})
 })
 
 describe('PveAuthError', () => {

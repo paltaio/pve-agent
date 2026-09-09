@@ -202,8 +202,14 @@ describe('ticket flow', () => {
 					await gate
 				}
 				if (emptyReply) return Response.json({ data: {} })
+				if (login.password === 'leak-me') {
+					return new Response(`<html>bad gateway: password=${login.password}</html>`, {
+						status: 502,
+					})
+				}
+				if (login.password === 'html') return new Response('<html>ok</html>')
 				if (login.username !== 'root@pam' || !accepted.has(login.password)) {
-					return new Response('authentication failure', { status: 401 })
+					return new Response('{"data":null}', { status: 401 })
 				}
 				issued += 1
 				const ticket = `PVE:root@pam:${issued}`
@@ -327,8 +333,26 @@ describe('ticket flow', () => {
 		expect(failure).toBeInstanceOf(PveAuthError)
 		if (failure instanceof PveAuthError) {
 			expect(failure.tier).toBe('ticket')
-			expect(failure.message).toMatch(/HTTP 401 authentication failure/)
+			expect(failure.message).toMatch(/HTTP 401\./)
 		}
+	})
+
+	test('a failed login never repeats the body, which can echo the password', async () => {
+		const a = auth({ ticket: { username: 'root@pam', password: 'leak-me' } })
+		const failure = await a.getTicket().catch((error: unknown) => error)
+		expect(failure).toBeInstanceOf(PveAuthError)
+		if (failure instanceof PveAuthError) {
+			expect(failure.message).toContain('HTTP 502')
+			expect(failure.message).not.toContain('leak-me')
+			expect(failure.message).not.toContain('html')
+		}
+	})
+
+	test('a 200 that is not JSON is an auth error naming the body', async () => {
+		const a = auth({ ticket: { username: 'root@pam', password: 'html' } })
+		const failure = await a.getTicket().catch((error: unknown) => error)
+		expect(failure).toBeInstanceOf(PveAuthError)
+		if (failure instanceof PveAuthError) expect(failure.message).toContain('not JSON')
 	})
 
 	test('reports a response with no ticket in it', async () => {

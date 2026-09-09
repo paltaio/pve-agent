@@ -12,7 +12,7 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { PveAuthError, PveConfigError, type AuthTier } from './errors.ts'
+import { PveApiError, PveAuthError, PveConfigError, type AuthTier } from './errors.ts'
 import type { HttpClient } from './http.ts'
 import { parseBoolean } from './values.ts'
 
@@ -184,6 +184,20 @@ function readTicketPayload(payload: unknown): TicketPayload | undefined {
 	return { ticket, csrfToken, username: typeof username === 'string' ? username : undefined }
 }
 
+/** The `message` of a JSON envelope, or '' for any other body. */
+function envelopeMessage(body: string): string {
+	try {
+		const parsed: unknown = JSON.parse(body)
+		if (typeof parsed === 'object' && parsed !== null && 'message' in parsed) {
+			const message = parsed.message
+			if (typeof message === 'string') return message.trim().slice(0, 200)
+		}
+	} catch {
+		// A proxy answers with its own page; nothing in it names the failure.
+	}
+	return ''
+}
+
 export class PveAuth {
 	readonly connection: PveConnection
 
@@ -299,7 +313,11 @@ export class PveAuth {
 		return this.cache(fresh.payload, credential.username)
 	}
 
-	/** One POST /access/ticket. A rejected login comes back as a result, not a throw. */
+	/**
+	 * One POST /access/ticket. A rejected login comes back as a result, not a
+	 * throw. The detail keeps the status and the envelope message; the rest of
+	 * the body could be a proxy page echoing the request.
+	 */
 	private async postTicket(username: string, password: string): Promise<LoginResult> {
 		const resp = await this.http.request(`${this.baseUrl}/api2/json/access/ticket`, {
 			method: 'POST',
@@ -308,9 +326,17 @@ export class PveAuth {
 			verifySsl: this.connection.verifySsl,
 		})
 		if (!resp.ok) {
-			return { ok: false, detail: `HTTP ${resp.status} ${(await resp.text()).slice(0, 300)}` }
+			const message = envelopeMessage(await resp.text())
+			return { ok: false, detail: `HTTP ${resp.status}${message ? ` ${message}` : ''}` }
 		}
-		const payload = readTicketPayload(await resp.json())
+		let parsed: unknown
+		try {
+			parsed = await resp.json()
+		} catch (error) {
+			if (error instanceof PveApiError) throw new PveAuthError('ticket', error.message)
+			throw error
+		}
+		const payload = readTicketPayload(parsed)
 		if (!payload) throw new PveAuthError('ticket', 'the response carried no ticket')
 		return { ok: true, payload }
 	}

@@ -6,7 +6,7 @@
  * in one process.
  */
 
-import { PveConnectionError } from './errors.ts'
+import { PveApiError, PveConnectionError } from './errors.ts'
 
 export type HttpBody =
 	| string
@@ -36,6 +36,7 @@ export interface HttpResponse {
 	ok: boolean
 	headers: Headers
 	text(): Promise<string>
+	/** The parsed body; a body that is not JSON throws PveApiError. */
 	json(): Promise<unknown>
 }
 
@@ -103,10 +104,23 @@ export class HttpClient {
 			ok: resp.ok,
 			headers: resp.headers,
 			text: async () => body,
-			json: async () => JSON.parse(body),
+			json: async () => parseJson(body, resp.status, init.method ?? 'GET', url),
 		}
 	}
 
 	/** Bun's fetch pools sockets process-wide, so there is nothing to release per client. */
 	close(): void {}
+}
+
+function parseJson(body: string, status: number, method: string, url: string): unknown {
+	try {
+		return JSON.parse(body)
+	} catch {
+		throw new PveApiError({
+			status,
+			method,
+			path: new URL(url).pathname,
+			detail: `the response is not JSON: ${body.trim().slice(0, 300) || 'empty body'}`,
+		})
+	}
 }
