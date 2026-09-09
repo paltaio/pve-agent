@@ -9,6 +9,7 @@
  * there.
  */
 
+import { isRecord } from '../core/values.ts'
 import { checkResult } from './executor.ts'
 import type {
 	GuestExecutor,
@@ -33,10 +34,6 @@ export function psEncode(script: string): string {
 
 function psString(value: string): string {
 	return `'${psQuote(value)}'`
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 export class WindowsGuest implements GuestOs {

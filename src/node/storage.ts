@@ -7,7 +7,13 @@
  */
 
 import type { PveClient, SignedRequest } from '../core/client.ts'
-import { toBoolean, toOptionalBoolean, toOptionalNumber, toOptionalString } from '../core/values.ts'
+import {
+	isRecord,
+	toBoolean,
+	toOptionalBoolean,
+	toOptionalNumber,
+	toOptionalString,
+} from '../core/values.ts'
 import type {
 	NodesStorageContentGetByNodeStorageParams,
 	NodesStorageContentPostByNodeStorageParams,
@@ -98,10 +104,6 @@ export interface FileRestoreEntry {
 	size: number | undefined
 	mtime: number | undefined
 	raw: Readonly<Record<string, unknown>>
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function normalizeStatusEntry(raw: Record<string, unknown>): StorageStatusEntry {

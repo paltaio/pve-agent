@@ -19,6 +19,7 @@
 import type { CredentialInput } from '../core/auth.ts'
 import { PveClient, type RequestTrace } from '../core/client.ts'
 import {
+	isRecord,
 	parseTagList,
 	toOptionalBoolean,
 	toOptionalNumber,
@@ -172,10 +173,6 @@ export interface AuthTicket {
 	/** Send this back with `otp` to finish a two-factor login. */
 	tfaChallenge: string | undefined
 	raw: Raw
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function record(value: unknown): Raw {

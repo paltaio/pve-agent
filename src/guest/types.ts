@@ -16,6 +16,7 @@ import {
 } from '../core/props.ts'
 import { formatConfigValue, parseConfigValue } from '../core/schema.ts'
 import {
+	isRecord,
 	parseTagList,
 	toBoolean,
 	toOptionalBoolean,
@@ -339,10 +340,6 @@ export function normalizeStatus(
 		runningQemu: toOptionalString(raw['running-qemu']),
 		raw,
 	}
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** Sub-keys the schema does not list are kept rather than refused, so a newer node still reads. */

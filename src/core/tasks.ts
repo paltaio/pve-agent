@@ -8,7 +8,7 @@
 
 import { PveConfigError, PveTaskError } from './errors.ts'
 import { pollUntil, type PollOptions } from './poll.ts'
-import { toOptionalNumber, toOptionalString } from './values.ts'
+import { isRecord, toOptionalNumber, toOptionalString } from './values.ts'
 import type { PveClient, RequestOptions } from './client.ts'
 
 export interface ParsedUpid {
@@ -143,10 +143,6 @@ export function taskOutcome(exitStatus: string | null): TaskOutcome {
 	if (/^WARNINGS: \d+$/.test(exitStatus)) return 'warning'
 	if (exitStatus === 'unexpected status') return 'unknown'
 	return 'error'
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function taskPath(upid: string, suffix: string): string {

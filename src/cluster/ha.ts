@@ -14,7 +14,13 @@
 
 import type { PveClient } from '../core/client.ts'
 import { PveError } from '../core/errors.ts'
-import { parseTagList, toBoolean, toOptionalBoolean, toOptionalString } from '../core/values.ts'
+import {
+	isRecord,
+	parseTagList,
+	toBoolean,
+	toOptionalBoolean,
+	toOptionalString,
+} from '../core/values.ts'
 import type {
 	ClusterHaGroupsPostParams,
 	ClusterHaGroupsPutParams,
@@ -90,10 +96,6 @@ export interface HaResourceAffinityRule extends HaRuleBase {
 }
 
 export type HaRule = HaNodeAffinityRule | HaResourceAffinityRule
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 /** Throws PveError when the rule type is one this module does not model. */
 export function normalizeHaRule(raw: Record<string, unknown>): HaRule {

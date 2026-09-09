@@ -29,6 +29,7 @@ import {
 } from './http.ts'
 import { rootOnlyParams, type RootOnlyParamHit } from './privileges.ts'
 import { resolveEndpoint } from './schema.ts'
+import { isRecord } from './values.ts'
 import {
 	getTaskLog,
 	getTaskStatus,
@@ -161,10 +162,6 @@ function encodeScalar(key: string, value: unknown): string {
 function appendQuery(path: string, query: string): string {
 	if (!query) return path
 	return `${path}${path.includes('?') ? '&' : '?'}${query}`
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 const MISSING_OBJECT = /does not exist|no such|not found|unable to find/i

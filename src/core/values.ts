@@ -46,6 +46,11 @@ export function toOptionalString(value: unknown): string | undefined {
 	return undefined
 }
 
+/** A JSON object that is not an array. */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 const TAG_SEPARATOR = /[;,]\s*/
 
 /** PVE joins tags with semicolons, and older configs used commas. */
