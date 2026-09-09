@@ -241,6 +241,17 @@ describe('waitForText', () => {
 		}
 	})
 
+	test('a screen with only the proxy banner names the missing getty', async () => {
+		const { serial, socket } = await connected()
+		socket.emit('\r\n\r\nstarting serial terminal on interface serial0\r\n')
+		const error = await serial.waitForText('login:', { timeoutMs: 30 }).catch((caught) => caught)
+		expect(error).toBeInstanceOf(PveTimeoutError)
+		if (error instanceof PveTimeoutError) {
+			expect(error.message).toContain('the guest wrote nothing to the serial port')
+			expect(error.message).toContain('serial-getty@ttyS0')
+		}
+	})
+
 	test('rejects when the console closes first', async () => {
 		const { serial } = await connected()
 		const waiting = serial.waitForText('never')

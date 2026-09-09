@@ -36,6 +36,8 @@ export const SHELL_PROMPT = /[$#]\s*$/
 const LOGIN_PROMPT = /login:\s*$/i
 const PASSWORD_PROMPT = /password:\s*$/i
 const LOGIN_REFUSED = /login incorrect|login failed|authentication failure/i
+/** What the terminal proxy prints itself before the guest has sent a byte. */
+const PROXY_BANNER = /^starting serial terminal on interface \S+$/i
 
 const NAMED_KEYS = {
 	enter: '\r',
@@ -483,7 +485,7 @@ export class SerialConsole extends EventEmitter<SerialConsoleEvents> {
 					new PveTimeoutError({
 						what,
 						waitedMs: timeoutMs,
-						detail: `the screen showed:\n${this.screen()}`,
+						detail: this.timeoutDetail(),
 					}),
 				)
 			}, timeoutMs)
@@ -510,6 +512,25 @@ export class SerialConsole extends EventEmitter<SerialConsoleEvents> {
 			}
 			this.waiters.add(waiter)
 		})
+	}
+
+	/**
+	 * The screen for a timeout message. When nothing but the proxy's own
+	 * banner is on it, the guest never wrote to the port, and the message
+	 * says what a VM needs for that.
+	 */
+	private timeoutDetail(): string {
+		const screen = this.screen()
+		// Lines are joined without a separator so a banner the terminal
+		// wrapped mid-word still reads as one.
+		const text = screen.split('\n').join('').trim()
+		const guestWrote = text !== '' && !PROXY_BANNER.test(text)
+		if (guestWrote) return `the screen showed:\n${screen}`
+		return (
+			'the guest wrote nothing to the serial port. A VM needs serial0: socket in its config ' +
+			'and a getty on the port inside (systemctl enable --now serial-getty@ttyS0, or ' +
+			'console=ttyS0 on the kernel command line); a container needs a getty on its console'
+		)
 	}
 
 	/**
