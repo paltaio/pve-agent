@@ -23,11 +23,15 @@ itself, so a fresh token can do nothing until it is named in an ACL. With
 
 ```ts
 import pve from 'pve-agent'
+import { writeFile } from 'node:fs/promises'
 
 await using cluster = await pve.connect()
 
 const created = await cluster.access.createToken('automation@pve', 'ci', { privsep: false })
-console.log(created.fullTokenId, created.value) // the secret is readable this once
+// The secret is readable this once; keep it in a file only the owner can read.
+await writeFile('ci.env', `PVE_TOKEN_ID=${created.fullTokenId}\nPVE_TOKEN_SECRET=${created.value}\n`, {
+	mode: 0o600,
+})
 await cluster.access.setAcl({
 	path: '/vms',
 	roles: 'PVEVMAdmin',
@@ -124,16 +128,9 @@ The shell layer prefers SSH: the command's own exit code, stdout and stderr
 kept apart, and binary-safe transfer in both directions. See
 [shell.md](shell.md).
 
-### termproxy under a token
-
-`POST /nodes/{node}/termproxy` is reachable on a token, but `get_shell_command`
-in PVE compares the caller against the literal `root@pam` and hands everyone
-else a `/bin/login` password prompt in place of a shell. So the termproxy
-transport is a fallback for a caller that holds a `root@pam` ticket and no SSH
-key. With neither credential, opening a shell throws
-`PveShellCredentialError` naming both ways to fix it.
-
-The per-guest `termproxy` is a different endpoint: it attaches to the guest's
+The termproxy websocket on a node is the fallback for a caller that holds a
+`root@pam` ticket and no SSH key; [shell.md](shell.md) has the details. The
+per-guest `termproxy` is a different endpoint: it attaches to the guest's
 serial console, and a token reaches it.
 
 ## How the client decides

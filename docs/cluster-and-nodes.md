@@ -13,8 +13,8 @@ const quorate = status.find((row) => row.type === 'cluster')?.quorate === true
 console.log(quorate)
 ```
 
-`quorate: false` on the cluster row means writes to `/etc/pve` are blocked,
-which is worth checking before anything that changes cluster config. PVE
+`quorate: false` on the cluster row means writes to `/etc/pve` are blocked;
+check it before anything that changes cluster config. PVE
 sends an integer; the row hands back a boolean, with the untouched response
 under `raw`.
 
@@ -184,7 +184,8 @@ await cluster.waitForTask(await node.api.services.restart('pvestatd'))
 await cluster.waitForTask(await node.api.services.reload('pveproxy'))
 ```
 
-The API knows a fixed list of 23 systemd units and refuses any other name.
+The API knows a fixed list of systemd units, `NODE_SERVICES`, and refuses any
+other name.
 `pveproxy`, `pvedaemon` and `pve-cluster` cannot be stopped, and a restart of
 `pveproxy` or `pvedaemon` drops in-flight API connections, including the one
 issuing the call. Anything outside the list goes through `shell.systemd`.
@@ -316,7 +317,7 @@ const joining = PveClient.fromEnv({ host: '192.0.2.12', username: 'root@pam' })
 try {
 	const upid = await joining.post<string>('/cluster/config/join', {
 		hostname: '192.0.2.10',
-		password: process.env['PVE_PASSWORD'],
+		password: joining.auth.ticketUsername === undefined ? undefined : process.env['PVE_PASSWORD'],
 		fingerprint: info.nodelist[0]?.pve_fp,
 	})
 	await joining.waitForTask(upid)
@@ -337,10 +338,14 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 const access = cluster.access
+const required = (name: string): string => {
+	const value = process.env[name]
+	if (!value) throw new Error(`${name} is not set`)
+	return value
+}
 
 await access.createGroup({ groupid: 'operators' })
-const password = process.env['OPS_PASSWORD'] ?? ''
-await access.createUser({ userid: 'ops@pve', password, groups: 'operators' })
+await access.createUser({ userid: 'ops@pve', password: required('OPS_PASSWORD'), groups: 'operators' })
 await access.createRole({ roleid: 'GuestDriver', privs: 'VM.Audit,VM.PowerMgmt,VM.Console' })
 await access.setAcl({
 	path: '/vms/100',
@@ -357,6 +362,7 @@ API tokens:
 
 ```ts
 import pve from 'pve-agent'
+import { writeFile } from 'node:fs/promises'
 
 await using cluster = await pve.connect()
 const access = cluster.access
@@ -365,11 +371,16 @@ const created = await access.createToken('automation@pve', 'ci', {
 	privsep: false,
 	comment: 'scripted work',
 })
-console.log(created.fullTokenId, created.value) // the secret is readable this once
+// The secret is readable this once; write it where only the owner can read it.
+await writeFile('ci.env', `PVE_TOKEN_ID=${created.fullTokenId}\nPVE_TOKEN_SECRET=${created.value}\n`, {
+	mode: 0o600,
+})
 await access.listTokens('automation@pve')
 await access.updateToken('automation@pve', 'ci', { comment: 'renamed' })
 const rotated = await access.regenerateToken('automation@pve', 'ci')
-console.log(rotated.value)
+await writeFile('ci.env', `PVE_TOKEN_ID=${rotated.fullTokenId}\nPVE_TOKEN_SECRET=${rotated.value}\n`, {
+	mode: 0o600,
+})
 await access.deleteToken('automation@pve', 'ci')
 ```
 
@@ -380,6 +391,11 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 const access = cluster.access
+const required = (name: string): string => {
+	const value = process.env[name]
+	if (!value) throw new Error(`${name} is not set`)
+	return value
+}
 
 await access.listRealms()
 await access.createRealm({
@@ -393,7 +409,7 @@ await cluster.waitForTask(await access.syncRealm('ldap', { 'enable-new': false, 
 
 await access.listUserTfa('ops@pve')
 await access.unlockTfa('ops@pve')
-await access.changePassword({ userid: 'ops@pve', password: process.env['OPS_PASSWORD'] ?? '' })
+await access.changePassword({ userid: 'ops@pve', password: required('OPS_PASSWORD') })
 ```
 
 `POST /access/ticket`, `PUT /access/password` and the three TFA writes are

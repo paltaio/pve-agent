@@ -19,13 +19,14 @@ The library runs on Bun.
 
 ## Credentials
 
-Eight variables, all optional except `PVE_HOST`:
+Eight variables. `PVE_HOST` and one credential pair, token or user and
+password, are required; the rest are optional:
 
 | Variable | Meaning |
 | --- | --- |
 | `PVE_HOST` | Node address the client talks to |
 | `PVE_PORT` | Defaults to 8006 |
-| `PVE_VERIFY_SSL` | `0`, `false`, `no` or `off` for a self-signed node certificate. Defaults to on |
+| `PVE_VERIFY_SSL` | Defaults to on; `0`, `false`, `no` or `off` turn TLS verification off |
 | `PVE_NODE` | Node used when a call does not name one |
 | `PVE_TOKEN_ID` | `user@realm!name`, or a bare name when `PVE_USER` is set |
 | `PVE_TOKEN_SECRET` | The token's secret |
@@ -40,13 +41,19 @@ A line may start with `export `, and a value may be quoted.
 ```sh
 # pve.env
 export PVE_HOST=192.0.2.10
-export PVE_VERIFY_SSL=0
 export PVE_NODE=pve1
 export PVE_TOKEN_ID=automation@pve!ci
 export PVE_TOKEN_SECRET=1a2b3c4d-...
 export PVE_USER=root@pam
 export PVE_PASSWORD=...
 ```
+
+A node with a self-signed certificate fails verification. Turning it off with
+`PVE_VERIFY_SSL=0` lets anyone on the path present their own certificate and
+read the credentials; the fix that keeps verification is to trust the node's
+certificate, or the CA that signed it, through `NODE_EXTRA_CA_CERTS` or the
+system trust store, or to issue the node a certificate from a CA the client
+already trusts.
 
 Configure both a token and a ticket when you can. The client holds both and
 picks per call, so an ordinary read goes out on the token and a call that
@@ -158,6 +165,11 @@ to; that needs its own client, built with `PveClient.fromEnv({ host })`.
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
+const required = (name: string): string => {
+	const value = process.env[name]
+	if (!value) throw new Error(`${name} is not set`)
+	return value
+}
 
 const vm = await cluster.createVm({
 	name: 'demo',
@@ -175,13 +187,13 @@ const ct = await cluster.createContainer({
 	rootfs: 'local-zfs:8',
 	memory: 512,
 	net0: 'name=eth0,bridge=vmbr0,ip=dhcp',
-	password: process.env['CT_PASSWORD'] ?? '',
+	password: required('CT_PASSWORD'),
 	start: true,
 })
 ```
 
 Both claim the lowest free vmid unless you pass one, wait for the create
-task, and return a handle. Disks are config keys rather than a separate call:
+task, and return a handle. Disks are config keys:
 `scsi0: 'local-zfs:16'` allocates 16 GiB. QEMU takes `memory` as a string and
 LXC as a number, as the schema declares them. See [guests.md](guests.md).
 

@@ -35,9 +35,9 @@ nothing else about a repository is settable.
 
 ### Services
 
-`node.api.services` takes a fixed list of 23 systemd units and refuses any
-other name. A custom unit, a timer, a drop-in, a mask, a unit file: none of
-them have an endpoint.
+`node.api.services` takes a fixed list of 23 systemd units, exported as
+`NODE_SERVICES`, and refuses any other name. A custom unit, a timer, a
+drop-in, a mask, a unit file: none of them have an endpoint.
 
 ```ts
 import pve from 'pve-agent'
@@ -74,6 +74,8 @@ await shell.zfs.setProperty('tank/data', 'quota', '100G')
 await shell.zfs.addVdev('tank', ['mirror', '/dev/sdd', '/dev/sde'])
 await shell.zfs.loadKey('tank/secure', { keyLocation: 'file:///root/key' })
 ```
+
+[shell.md](shell.md) lists the whole ZFS surface.
 
 ### Running a command inside a container
 
@@ -132,18 +134,9 @@ await shell.qm.importOvf(9001, '/mnt/appliance.ovf', 'local-zfs')
 
 Hook lines, policy routing, extra static routes, VRFs, tunnels, ethtool
 settings and per-interface sysctls have no parameter on the interface
-endpoint, and an interface the API rewrites drops them.
-
-```ts
-import pve, { shHeredoc } from 'pve-agent'
-
-await using cluster = await pve.connect()
-const shell = await cluster.node('pve1').shell
-
-const edited = await shell.output('cat /etc/network/interfaces')
-await shell.run(`cat > /etc/network/interfaces ${shHeredoc(edited)}`, { check: true })
-await shell.run('ifreload -a', { check: true })
-```
+endpoint, and an interface the API rewrites drops them. Editing the file over
+the shell, and the connectivity risk that carries, is in
+[networking.md](networking.md).
 
 ### Other `qm` subcommands with no endpoint
 
@@ -181,100 +174,30 @@ console.log(text.length)
 
 ## Endpoints that exist but need a `root@pam` ticket
 
-Twelve endpoints are registered with no permissions block. An API token is a
-different string from `root@pam` and cannot pass, however privileged. See
-[auth.md](auth.md) for the list and the parameter-level cases.
-
-The one most likely to surprise you is `POST /nodes/{node}/execute`, the
-batch endpoint, since nothing about it looks privileged.
+Twelve endpoints are registered with no permissions block, and their handlers
+compare the caller against the string `root@pam`, which an API token never
+matches. [auth.md](auth.md) lists them and the parameter-level cases. The one
+most likely to surprise you is `POST /nodes/{node}/execute`, the batch
+endpoint, since nothing about it looks privileged.
 
 ## Endpoints that answer, but not what you expect
 
-### termproxy under a token
-
-`POST /nodes/{node}/termproxy` is reachable on a token, but only a literal
-`root@pam` gets a shell. Everyone else gets a `/bin/login` password prompt.
-
-Use SSH for a root shell on a node. The four guest console endpoints,
-`vncproxy`, `vncwebsocket`, `termproxy` and `spiceproxy`, do work on a token,
-so guest consoles need nothing extra.
-
-### HA groups
-
-PVE 9 migrated HA groups to HA rules. Every group endpoint on a migrated
-cluster answers 500 with "ha groups have been migrated to rules". Write node
-placement as a node-affinity rule through `cluster.api.ha.createRule`.
-
-### Firewall rule create
-
-Create always prepends and ignores `pos`. Move the rule afterwards with
-`update(0, { moveto })`. A rule created without `enable` is written disabled.
-
-### `POST` versus `PUT` on a guest config
-
-`POST .../config` is asynchronous and returns a UPID. `PUT .../config` takes
-the same parameters, is synchronous and returns null. Use PUT unless the
-change hotplugs a device or allocates storage. LXC has no POST form.
-
-### LXC `unprivileged`
-
-The schema documents `default: 0` and the create handler uses 1 when the
-parameter is absent. `createContainer` sends `unprivileged: true` when the
-spec leaves it out. On a restore it comes from the archive.
-
-### Descriptions come back with a newline
-
-PVE appends a trailing newline to every description it stores, on guests and
-on snapshots. A caller comparing a description to what it just wrote gets a
-false mismatch. Compare with `.trim()`.
-
-### `/cluster/resources` is eventually consistent
-
-It answers from the cache pvestatd refreshes every few seconds, so right
-after a create or a template conversion it can still report stale data,
-including `status: 'unknown'` and a stale template flag. Read the guest's own
-`status` or `config` endpoint when the answer has to be current.
-
-### `rrddata` on a young guest
-
-It throws `PveNotFoundError` until pvestatd writes the first sample, roughly
-a minute after the guest is created.
-
-### `WARNINGS: n`
-
-That is a task success status, not a failure. `waitForTask` treats it that
-way unless you pass `failOnWarnings: true`.
-
-### `/cluster/nextid`
-
-The schema declares the answer an integer and the handler sends a JSON
-string. `cluster.nextId()` reads either and returns a number. The answer is
-only true at the moment of the call, so create the guest right after.
-
-### LXC `suspend`
-
-It freezes the container. PVE marks the endpoint experimental.
-
-### `qm monitor`
-
-PVE maps a small set of HMP commands onto normal VM privileges and refuses
-everything else for anyone but `root@pam`. The registry cannot tell which is
-which, so an unmapped command through `vm.api.monitor` reaches the node and
-comes back as `PvePermissionError`. `shell.qm.monitor` runs as root.
-
-### Property strings cannot hold a comma
-
-`parse_property_string` on the node is a plain split on commas, with no
-quoting and no escaping in the encoding at all. A value containing a comma
-cannot be represented, and the encoder here refuses one for the same reason
-the node does. Lists inside a value use semicolons. See
-[property-strings.md](property-strings.md).
-
-### A DELETE with a body
-
-The API server refuses a DELETE that carries a body, so DELETE parameters
-travel in the query string. `AccessApi.deleteTfa` sends the caller's password
-that way, and it lands in the pveproxy access log.
+| Endpoint | What happens | Details |
+| --- | --- | --- |
+| `POST /nodes/{node}/termproxy` | A caller other than `root@pam` gets a `/bin/login` prompt | [shell.md](shell.md) |
+| `/cluster/ha/groups/*` | 500 on a cluster migrated to HA rules | [cluster-and-nodes.md](cluster-and-nodes.md) |
+| Firewall rule create | Prepends and ignores `pos`; a rule without `enable` is stored disabled | [networking.md](networking.md) |
+| `POST` on a guest config | Asynchronous, answers a UPID; `PUT` is synchronous | [guests.md](guests.md) |
+| LXC create `unprivileged` | The handler defaults to 1, the schema says 0 | [guests.md](guests.md) |
+| Any description | Comes back with a trailing newline | [guests.md](guests.md) |
+| `/cluster/resources` | Answers from the pvestatd cache, seconds behind | [getting-started.md](getting-started.md) |
+| `rrddata` on a young guest | `PveNotFoundError` until pvestatd writes the first sample | [guests.md](guests.md) |
+| A task ending `WARNINGS: n` | A success status | [tasks-and-errors.md](tasks-and-errors.md) |
+| `/cluster/nextid` | Sends a JSON string for a declared integer; `cluster.nextId()` returns a number, true only at the moment of the call | |
+| LXC `suspend` | Freezes the container; PVE marks the endpoint experimental | [guests.md](guests.md) |
+| `qm monitor` through the API | Only a small set of HMP commands is mapped onto VM privileges; anything else is `PvePermissionError` for a caller other than `root@pam`, while `shell.qm.monitor` runs as root | [shell.md](shell.md) |
+| Property strings | No quoting: a value cannot hold a comma | [property-strings.md](property-strings.md) |
+| `DELETE /access/tfa/{userid}/{id}` | `AccessApi.deleteTfa` sends a non-root caller's password in the query string, where the pveproxy access log records it; a `root@pam` ticket sends none, and any other caller should change the password afterwards | |
 
 ## Out of scope
 

@@ -1,7 +1,7 @@
 # Consoles
 
 Two consoles, both reachable on an API token, both connecting on the first
-call rather than when the handle is made.
+call; making the handle sends nothing.
 
 | | `vm.kvm` | `guest.console` |
 | --- | --- | --- |
@@ -96,7 +96,7 @@ await vm.kvm.press('enter')
 
 await vm.kvm.waitForScreen({ kind: 'changed', since: before }, { timeoutMs: 30_000 })
 await vm.kvm.waitForScreen(
-	{ kind: 'color', color: '#e47100', threshold: 0.8, area: 0.001 },
+	{ kind: 'color', color: '#e57000', threshold: 0.8, area: 0.001 },
 	{ timeoutMs: 120_000 },
 )
 await vm.kvm.waitForScreen({ kind: 'pixel', x: 10, y: 10, color: [255, 255, 255] })
@@ -212,9 +212,14 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 const vm = cluster.vm(100)
+const required = (name: string): string => {
+	const value = process.env[name]
+	if (!value) throw new Error(`${name} is not set`)
+	return value
+}
 
 await vm.console.waitForText(/login:/, { timeoutMs: 120_000 })
-await vm.console.login('root', process.env['VM_PASSWORD'] ?? '') // resolves at a shell prompt
+await vm.console.login('root', required('VM_PASSWORD')) // resolves at a shell prompt
 await vm.console.sendLine('cat /etc/os-release')
 const screen = await vm.console.waitForPrompt()
 console.log(screen)
@@ -249,7 +254,8 @@ the guest refuses the credentials.
 `'pageup'`, `'pagedown'`, `'f1'` to `'f12'`, and `'ctrl-a'` to `'ctrl-z'`.
 
 A VM needs a `serialN` socket in its config and something inside writing to
-it: `console=ttyS0` on the kernel command line, or a getty on the port.
+it: `console=ttyS0` on the kernel command line, or a getty on the port. A
+getty started by hand stops at the next reboot; enable the unit to keep it.
 
 ```ts
 import pve from 'pve-agent'
@@ -302,9 +308,8 @@ POST /nodes/{node}/{qemu,lxc}/{vmid}/termproxy
 POST /nodes/{node}/{qemu,lxc}/{vmid}/spiceproxy
 ```
 
-The node-level shell is different. `POST /nodes/{node}/termproxy` answers
-anyone who is not literally `root@pam` with a `/bin/login` password prompt
-rather than a root shell. See [shell.md](shell.md) and [auth.md](auth.md).
+The node-level shell, `POST /nodes/{node}/termproxy`, is gated on a
+`root@pam` ticket; see [shell.md](shell.md).
 
 ## Sessions
 

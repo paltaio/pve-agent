@@ -34,7 +34,7 @@ await storage.update('backup-nfs', { disable: true })
 await storage.delete('backup-nfs')
 ```
 
-Deleting a definition removes the entry, not the data.
+Deleting a definition removes the entry and leaves the data in place.
 
 Creating a ZFS pool storage assumes the pool already exists on the node.
 `node.api.disks.createZfs` builds one from raw disks; anything past a plain
@@ -48,14 +48,19 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 const scan = cluster.node('pve1').api.scan
+const required = (name: string): string => {
+	const value = process.env[name]
+	if (!value) throw new Error(`${name} is not set`)
+	return value
+}
 
 await scan.nfs('10.0.0.9')
-await scan.cifs({ server: '10.0.0.9', username: 'svc', password: process.env['CIFS_PASSWORD'] ?? '' })
+await scan.cifs({ server: '10.0.0.9', username: 'svc', password: required('CIFS_PASSWORD') })
 await scan.iscsi('10.0.0.9:3260')
 await scan.lvm()
 await scan.lvmThin('pve')
 await scan.zfs()
-await scan.pbs({ server: 'pbs.example.com', username: 'svc@pbs', password: process.env['PBS_PASSWORD'] ?? '' })
+await scan.pbs({ server: 'pbs.example.com', username: 'svc@pbs', password: required('PBS_PASSWORD') })
 ```
 
 These read only. Nothing is configured until `cluster.api.storage.create`
@@ -241,9 +246,9 @@ if (etc) {
 }
 ```
 
-The response is the file itself rather than JSON, so `fileRestoreDownload`
-returns `{ url, headers }` and leaves the fetch to you. `tar: true` returns a
-tar stream in place of a zip for a directory. `filepath` is `/` for the top
+The response is the file itself, so `fileRestoreDownload` returns
+`{ url, headers }` and leaves the fetch to you. A directory comes back as a
+zip, or as a tar stream with `tar: true`. `filepath` is `/` for the top
 level and the base64 path of an entry below that.
 
 Restoring a whole guest is a create call with `archive` on a VM or
@@ -312,25 +317,9 @@ await cluster.waitForTask(await disks.deleteZfs('tank', { 'cleanup-config': true
 
 ### What ZFS has no API for
 
-Create and destroy is the whole of it. There is no endpoint for scrub,
-import, export, add, attach, detach, replace, trim, upgrade, property set,
-dataset create or native encryption. An existing pool can be listed and read,
-and otherwise only removed.
-
-```ts
-import pve from 'pve-agent'
-
-await using cluster = await pve.connect()
-const shell = await cluster.node('pve1').shell
-
-await shell.zfs.scrub('tank')
-await shell.zfs.createDataset('tank/data', { properties: { compression: 'zstd' } })
-await shell.zfs.setProperty('tank/data', 'quota', '100G')
-await shell.zfs.addVdev('tank', ['mirror', '/dev/sdd', '/dev/sde'])
-```
-
-See [shell.md](shell.md) for the full ZFS surface and
-[api-gaps.md](api-gaps.md) for the rest of the gaps.
+Create and destroy is the whole of it; every other ZFS operation goes through
+`shell.zfs`. [api-gaps.md](api-gaps.md) lists what is missing and
+[shell.md](shell.md) the full ZFS surface.
 
 ## Replication
 

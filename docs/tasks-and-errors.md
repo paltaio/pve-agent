@@ -2,8 +2,8 @@
 
 ## UPIDs
 
-Anything PVE runs in the background answers with a UPID rather than a
-result:
+Anything PVE runs in the background answers with a UPID, the id of the
+worker task, and the result comes later:
 
 ```
 UPID:pve1:00001A2B:0004C3D5:68B4F0A1:qmstart:9001:root@pam!automation:
@@ -57,7 +57,7 @@ console.log(status.upid, status.node, status.type, status.id, status.user, statu
 
 Polling starts at 200 ms and doubles to 2 s. On failure it throws
 `PveTaskError` carrying the exit status and the last 25 lines of the task
-log, so the message says why the task failed rather than that it failed.
+log, so the message says why the task failed.
 
 `WARNINGS: n` is a success status. PVE treats it that way and so does
 `waitForTask`; `failOnWarnings: true` turns it into a failure.
@@ -255,7 +255,7 @@ try {
 Four different things land here: a 404, a 501, a path that is not in the
 generated registry, and the 500 PVE answers when a guest or a config file
 does not exist. The last one is why `rrddata` on a guest created a minute ago
-throws this rather than returning an empty list:
+throws this instead of an empty list:
 
 ```ts
 import pve, { PveNotFoundError } from 'pve-agent'
@@ -336,8 +336,8 @@ try {
 }
 ```
 
-`run`, `sh` and `exec` return the exit code rather than throwing; `output`
-and the file helpers throw.
+`run`, `sh` and `exec` return the exit code; `output` and the file helpers
+throw.
 
 ### PveShellCommandError
 
@@ -357,8 +357,7 @@ try {
 }
 ```
 
-`shell.run` returns the exit code rather than throwing. `check: true` and
-`shell.output` throw. The other four shell classes are in
+`shell.run` returns the exit code. `check: true` and `shell.output` throw. The other four shell classes are in
 [shell.md](shell.md).
 
 ## Tracing
@@ -387,7 +386,10 @@ would decide. See [shell.md](shell.md).
 - A ticket in its last quarter hour is renewed before the call, and one 403
   on a ticket call triggers a fresh login and a single retry.
 - A call whose tier decision says `ticket` while only a token is configured
-  throws rather than trying and failing.
+  throws before sending anything.
+- The power calls and `delete` on a guest handle post their task again for up
+  to 45 seconds while it fails on the guest's config lock, since the node
+  takes that lock before it changes anything. See [guests.md](guests.md).
 
-Everything else is yours. A task that failed is not retried, and a command
-that exited non-zero is not run again.
+Everything else is yours: a task that failed for any other reason ran once,
+and a command that exited non-zero ran once.

@@ -102,8 +102,8 @@ reads.
 Encoding orders the parts the way PVE does: the default key, then required
 sub-keys, then the rest, each group sorted. A value whose sub-keys were
 already in that order comes back byte for byte; the rest come back
-semantically equal with the sub-keys re-sorted, which is worth knowing before
-you diff a config against what you sent.
+semantically equal with the sub-keys re-sorted; diff a config against what
+you sent with that in mind.
 
 The default key is written bare, without its name, which is the form PVE
 writes too. `formatConfigValue('PUT', '/cluster/options', 'migration',

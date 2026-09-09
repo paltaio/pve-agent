@@ -18,7 +18,7 @@ if (guest.type === 'qemu') await guest.kvm.press('enter')
 
 ## Creating a VM
 
-Disks are config keys, not a separate call. `scsi0: 'local-zfs:16'` allocates
+Disks are config keys. `scsi0: 'local-zfs:16'` allocates
 16 GiB on `local-zfs`; `scsi0: 'local-zfs:0,import-from=<volume>'` imports an
 existing image and takes the size from it.
 
@@ -74,6 +74,11 @@ const vm = await cluster.createVm({
 import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
+const required = (name: string): string => {
+	const value = process.env[name]
+	if (!value) throw new Error(`${name} is not set`)
+	return value
+}
 
 const ct = await cluster.createContainer({
 	node: 'pve1',
@@ -85,7 +90,7 @@ const ct = await cluster.createContainer({
 	cores: 1,
 	net0: 'name=eth0,bridge=vmbr0,ip=dhcp',
 	mp0: 'local-zfs:32,mp=/data',
-	password: process.env['CT_PASSWORD'] ?? '',
+	password: required('CT_PASSWORD'),
 	unprivileged: true,
 	start: true,
 })
@@ -352,7 +357,7 @@ await using cluster = await pve.connect()
 const ct = cluster.container(110)
 
 await cluster.waitForTask(await ct.api.moveVolume({ volume: 'mp0', storage: 'fast-nvme', delete: true }))
-await ct.api.toTemplate() // synchronous, answers null rather than a UPID
+await ct.api.toTemplate() // synchronous; answers null
 ```
 
 ## Running commands inside a guest
@@ -456,6 +461,11 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 const agent = cluster.vm(100).guest
+const required = (name: string): string => {
+	const value = process.env[name]
+	if (!value) throw new Error(`${name} is not set`)
+	return value
+}
 
 await agent.ping()
 await agent.osInfo()
@@ -464,7 +474,7 @@ await agent.filesystems()
 await agent.fsfreezeFreeze()
 await agent.fsfreezeThaw()
 await agent.fstrim()
-await agent.setUserPassword({ username: 'root', password: process.env['VM_PASSWORD'] ?? '' })
+await agent.setUserPassword({ username: 'root', password: required('VM_PASSWORD') })
 const file = await agent.fileRead('/etc/hostname') // { content, truncated, bytesRead }
 await agent.fileWrite('/tmp/x', 'hello\n')
 const pid = await agent.startExec(['sleep', '30'])

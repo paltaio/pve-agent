@@ -35,8 +35,8 @@ when the client holds a `root@pam` ticket. Force one with `transport: 'ssh'`
 or `'termproxy'`.
 
 `POST /nodes/{node}/termproxy` hands anyone who is not literally `root@pam` a
-`/bin/login` password prompt in place of a shell, an API token included, so
-the fallback is only there for a ticket.
+`/bin/login` password prompt where a shell would be, an API token included,
+so the fallback serves a `root@pam` ticket and nothing else.
 
 With neither credential, opening the shell throws `PveShellCredentialError`
 with a message naming both ways to fix it.
@@ -57,7 +57,7 @@ await using cluster = await pve.connect({
 			port: 22,
 			identityFile: '/home/me/.ssh/pve',
 			strictHostKeyChecking: 'accept-new',
-			controlPath: '/tmp/pve-%h', // reuse one TCP session across commands
+			controlPath: '~/.ssh/cm-%C', // reuse one TCP session across commands
 			controlPersistSeconds: 60,
 			connectTimeoutSeconds: 10,
 			defaultTimeoutMs: 120_000,
@@ -68,7 +68,8 @@ await using cluster = await pve.connect({
 ```
 
 Without `controlPath`, SSH opens a connection per command. Set it for a script
-that runs many. `ssh.host` defaults to the node name, so it works when the node
+that runs many; keep the socket under `~/.ssh`, a directory only you can
+write, and let `%C` name it. `ssh.host` defaults to the node name, so it works when the node
 names resolve.
 
 ## Running commands
@@ -91,8 +92,8 @@ console.log(result.exitCode, result.stdout, result.stderr, result.durationMs)
 await shell.output('hostname -f') // trimmed stdout, throws on non-zero
 ```
 
-`run` returns the exit code rather than throwing; `check: true` and `output`
-throw `PveShellCommandError`. A command that passes `timeoutMs` throws
+`run` returns the exit code; `check: true` and `output` throw
+`PveShellCommandError` on a non-zero one. A command that passes `timeoutMs` throws
 `PveShellTimeoutError` carrying the output read so far. `env` exports the
 variables and `cwd` changes directory before the command runs; a `cd` that
 fails ends the line with its own exit code.
@@ -121,8 +122,8 @@ content equals.
 
 Two other checks throw where quoting cannot help. A parameter that goes into
 a command line as a bare number is checked with `Number.isSafeInteger`, so a
-numeric string from a JavaScript caller is an error rather than unquoted shell
-input. A name joined to a fixed directory, such as a unit file, a drop-in, a
+numeric string from a JavaScript caller throws before it reaches the command
+line. A name joined to a fixed directory, such as a unit file, a drop-in, a
 repository file or a keyring, has to be one path component: empty, `.`,
 `..`, `/` and NUL are all refused. Each of these throws
 `PveShellPolicyError`.
@@ -146,9 +147,8 @@ to the target and renamed over it. The policy does not see either.
 ## The policy
 
 The policy reads each command line before it goes to the node. It is a rail
-for a caller that builds command lines from generated text, not a sandbox: a
-shell has enough indirection that a determined caller can hide anything from
-it.
+for a caller that builds command lines from generated text. A shell has
+enough indirection that a determined caller can hide anything from it.
 
 ```ts
 import pve from 'pve-agent'
@@ -256,8 +256,9 @@ destroy`, which the API covers.
 
 ## systemd
 
-The node API's service endpoint takes a fixed list of 23 PVE units. Any other
-unit, and every unit file, drop-in, timer and mask, is here.
+The node API's service endpoint takes a fixed list of PVE units, listed in
+[api-gaps.md](api-gaps.md). Any other unit, and every unit file, drop-in,
+timer and mask, is here.
 
 ```ts
 import pve from 'pve-agent'
