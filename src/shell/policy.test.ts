@@ -71,6 +71,76 @@ describe('the default policy', () => {
 		}
 	})
 
+	test('rm is refused with -r or -f anywhere in its arguments', () => {
+		for (const command of [
+			'rm -v -r /',
+			'rm -i -rf /var',
+			'rm /var -rf',
+			"rm '-rf' /",
+			'rm "-r" /var',
+			'\\rm -rf /tmp/x',
+			'rm --recursive /var',
+			'echo / | xargs rm -rf',
+			"sh -c 'rm -rf /'",
+		]) {
+			expect(policy.explain(command).allowed, command).toBe(false)
+		}
+		expect(policy.explain('rm -- -rf').allowed).toBe(false)
+		expect(policy.explain('rm /tmp/one-file /tmp/-r').allowed).toBe(true)
+	})
+
+	test('a wrapper in front of a power word does not hide it', () => {
+		for (const command of [
+			'env reboot',
+			'env -i FOO=1 reboot',
+			'exec reboot',
+			'nohup reboot',
+			'nice -n 10 reboot',
+			'ionice -c 3 reboot',
+			'timeout 5 reboot',
+			'timeout -s KILL 5 poweroff',
+			'command reboot',
+			'sudo -u root env X=1 halt',
+			'doas -u root reboot',
+			'busybox poweroff',
+			'bash -c "reboot"',
+			"sh -c 'echo ok; halt'",
+			'\\reboot',
+		]) {
+			expect(policy.explain(command).allowed, command).toBe(false)
+		}
+	})
+
+	test('init runlevels, systemctl targets and the sysrq trigger are power changes', () => {
+		for (const command of [
+			'init 6',
+			'telinit 0',
+			'init -t 5 0',
+			'systemctl start reboot.target',
+			'systemctl --no-block isolate poweroff.target',
+			'systemctl start halt.target',
+			'systemctl isolate kexec.target',
+			'echo b > /proc/sysrq-trigger',
+			'echo o | tee /proc/sysrq-trigger',
+		]) {
+			expect(policy.explain(command).allowed, command).toBe(false)
+		}
+		for (const command of [
+			'init 3',
+			'systemctl start pveproxy',
+			'systemctl isolate multi-user.target',
+		]) {
+			expect(policy.explain(command).allowed, command).toBe(true)
+		}
+	})
+
+	test('a redirect onto a zvol or a by-id device is refused', () => {
+		expect(policy.explain('cat x > /dev/zvol/rpool/data/vm-100-disk-0').allowed).toBe(false)
+		expect(policy.explain('cat x > /dev/disk/by-id/nvme-eui.1').allowed).toBe(false)
+		expect(policy.explain("cat x > '/dev/sda'").allowed).toBe(false)
+		expect(policy.explain('cat x > /dev/null').allowed).toBe(true)
+	})
+
 	test('a command nested in pct exec or qm guest exec is read as its own', () => {
 		expect(policy.explain('pct exec 9002 -- rm -rf /tmp/x').allowed).toBe(false)
 		expect(policy.explain('qm guest exec 101 -- mkfs.ext4 /dev/vdb').allowed).toBe(false)
@@ -107,6 +177,22 @@ describe('deny patterns', () => {
 		expect(policy.explain('zpool status | /usr/bin/tee /etc/x').allowed).toBe(false)
 		expect(policy.explain('zpool status; LC_ALL=C tee /etc/x').allowed).toBe(false)
 		expect(policy.explain('teeth').allowed).toBe(true)
+	})
+
+	test('a string sees through wrappers, a backslash and a brace group', () => {
+		const policy = new CommandPolicy({ deny: ['rm'] })
+		for (const command of [
+			'sudo rm /tmp/x',
+			'env rm /tmp/x',
+			'\\rm /tmp/x',
+			'{ rm -x; }',
+			'timeout 5 /bin/rm /tmp/x',
+			"sh -c 'rm /tmp/x'",
+			'find /tmp | xargs rm',
+		]) {
+			expect(policy.explain(command).allowed, command).toBe(false)
+		}
+		expect(policy.explain('{ ls; }').allowed).toBe(true)
 	})
 
 	test('a regular expression is tested against the whole line', () => {
@@ -169,5 +255,14 @@ describe('commandPrograms', () => {
 	test('skips variable assignments and strips the directory', () => {
 		expect(commandPrograms("LC_ALL=C '/usr/bin/apt-get' -s upgrade")).toEqual(['apt-get'])
 		expect(commandPrograms('(cd /tmp; ls)')).toEqual(['cd', 'ls'])
+		expect(commandPrograms('dd if=/dev/zero of=/tmp/x')).toEqual(['dd'])
+	})
+
+	test('lists a wrapper with the program it runs', () => {
+		expect(commandPrograms('sudo -u root env X=1 zfs list')).toEqual(['sudo', 'env', 'zfs'])
+		expect(commandPrograms('timeout 5 zpool status')).toEqual(['timeout', 'zpool'])
+		expect(commandPrograms("bash -c 'zfs list | grep data'")).toEqual(['bash', 'zfs', 'grep'])
+		expect(commandPrograms('echo $(reboot)')).toEqual(['echo', 'reboot'])
+		expect(commandPrograms('{ rm -x; }')).toEqual(['rm'])
 	})
 })
