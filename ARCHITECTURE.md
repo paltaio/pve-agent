@@ -643,8 +643,12 @@ every `keepaliveMs`. What the proxy sends is pty output with no framing at all.
 
 Output goes into the emulator, so `screen()` is the text a user would see: a
 redraw or a progress bar comes out as its final state, and colour and cursor
-movement leave no escape sequences behind. `waitForPrompt` tests the line the
-cursor is on against `SHELL_PROMPT`, a line ending in `$` or `#`. `login`
+movement leave no escape sequences behind. `waitForText` matches the text
+rendered since the last `sendLine`, or the whole screen before any.
+`waitForPrompt` tests the line the cursor is on against `SHELL_PROMPT`, a line
+ending in `$` or `#`, and after a `sendLine` only once the cursor has moved
+past the point the line went out, since until the echo arrives that line still
+ends in the old prompt. `login`
 sends Enter when the cursor is not on a login prompt, waits for the login and
 password prompts in turn, and throws `PveConsoleError` when the text after the
 password matches a refusal. A wait that passes its deadline throws

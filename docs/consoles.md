@@ -231,13 +231,18 @@ Output is fed into a headless xterm emulator, so `screen()` returns the
 rendered screen with trailing blank lines removed: what a user would see, not
 a byte stream. Redraws and progress bars come out as their final state.
 
-`waitForText` takes a string or a RegExp against the whole screen.
-`waitForPrompt` tests the line the cursor is on against `SHELL_PROMPT`, a line
-ending in `$` or `#`, or against the `pattern` you pass. Both throw
-`PveTimeoutError` with the last screen in the message when the timeout, 30
-seconds by default, passes. `login` waits for the login and password prompts
-in turn, sends Enter first when the cursor is not on a login prompt, and
-throws `PveConsoleError` when the guest refuses the credentials.
+`waitForText` takes a string or a RegExp and matches it against the text
+rendered since the last `sendLine`, or against the whole screen when nothing
+has been sent yet. `waitForPrompt` tests the line the cursor is on against
+`SHELL_PROMPT`, a line ending in `$` or `#`, or against the `pattern` you
+pass; after a `sendLine` the prompt has to be one rendered after the line went
+out, since the cursor line still ends in the old prompt until the echo comes
+back. A guest that redraws the screen from the top, as `clear` does, resets
+both to the whole screen. Both waits throw `PveTimeoutError` with the last
+screen in the message when the timeout, 30 seconds by default, passes.
+`login` waits for the login and password prompts in turn, sends Enter first
+when the cursor is not on a login prompt, and throws `PveConsoleError` when
+the guest refuses the credentials.
 
 `sendKey` takes `'enter'`, `'tab'`, `'escape'`, `'backspace'`, `'delete'`,
 `'insert'`, `'up'`, `'down'`, `'left'`, `'right'`, `'home'`, `'end'`,

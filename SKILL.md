@@ -237,8 +237,10 @@ await vm.console.sendKey('ctrl-c') // named keys: enter, tab, escape, backspace,
 await vm.console.readNew() // text rendered since the previous call; screen() is the whole screen
 ```
 
-`waitForText` and `waitForPrompt` throw `PveTimeoutError` carrying the last
-screen. `login` throws `PveConsoleError` when the guest refuses the credentials.
+`waitForText` and `waitForPrompt` look at the output rendered since the last
+`sendLine`, or the whole screen before any, and throw `PveTimeoutError`
+carrying the last screen. `login` throws `PveConsoleError` when the guest
+refuses the credentials.
 
 ## The node shell
 

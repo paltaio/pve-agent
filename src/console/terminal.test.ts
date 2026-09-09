@@ -253,6 +253,71 @@ describe('waitForText', () => {
 	})
 })
 
+describe('after sendLine', () => {
+	/** A shell that answers `uptime` after a pause and `clear` with a redraw. */
+	function shell(): FakePtyOptions {
+		return {
+			banner: 'root@host:~# ',
+			onLine: (line) => {
+				if (line === 'clear') return '\x1b[H\x1b[2J\x1b[3Jroot@host:~# '
+				return undefined
+			},
+		}
+	}
+
+	test('waitForPrompt resolves only once a prompt follows the output', async () => {
+		const { serial, socket } = await connected({}, shell())
+		await serial.waitForPrompt()
+		serial.sendLine('uptime')
+		let settled = false
+		const waiting = serial.waitForPrompt({ timeoutMs: 1000 }).then((screen) => {
+			settled = true
+			return screen
+		})
+		await serial.waitForText('uptime')
+		await Bun.sleep(20)
+		expect(settled).toBe(false)
+		socket.emit(' 10:00:00 up 3 days\r\nroot@host:~# ')
+		expect(await waiting).toBe('root@host:~# uptime\n 10:00:00 up 3 days\nroot@host:~#')
+	})
+
+	test('waitForText ignores what was on the screen before the line went out', async () => {
+		const { serial, socket } = await connected({}, shell())
+		socket.emit('file\r\nroot@host:~# ')
+		await serial.waitForText('file')
+		serial.sendLine('ls')
+		let settled = false
+		const waiting = serial.waitForText('file', { timeoutMs: 1000 }).then((screen) => {
+			settled = true
+			return screen
+		})
+		await serial.waitForText('ls')
+		await Bun.sleep(20)
+		expect(settled).toBe(false)
+		socket.emit('file\r\nroot@host:~# ')
+		expect(await waiting).toBe('file\nroot@host:~# ls\nfile\nroot@host:~#')
+	})
+
+	test('a second wait with no new send sees everything since the last one', async () => {
+		const { serial, socket } = await connected({}, shell())
+		await serial.waitForPrompt()
+		serial.sendLine('uptime')
+		socket.emit('up\r\nroot@host:~# ')
+		await serial.waitForPrompt({ timeoutMs: 1000 })
+		expect(await serial.waitForText('up', { timeoutMs: 1000 })).toContain('up')
+		expect(await serial.waitForPrompt({ timeoutMs: 1000 })).toBe(
+			'root@host:~# uptime\nup\nroot@host:~#',
+		)
+	})
+
+	test('a prompt drawn at the top after a screen clear counts', async () => {
+		const { serial } = await connected({}, shell())
+		await serial.waitForPrompt()
+		serial.sendLine('clear')
+		expect(await serial.waitForPrompt({ timeoutMs: 1000 })).toBe('root@host:~#')
+	})
+})
+
 describe('waitForPrompt', () => {
 	test('watches the line the cursor is on', async () => {
 		const { serial, socket } = await connected()

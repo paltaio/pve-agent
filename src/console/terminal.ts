@@ -190,6 +190,7 @@ export class SerialConsole extends EventEmitter<SerialConsoleEvents> {
 	private connectTimer: ReturnType<typeof setTimeout> | undefined
 	private keepaliveTimer: ReturnType<typeof setInterval> | undefined
 	private readMark: Mark
+	private sentMark: Mark | undefined
 
 	constructor(options: SerialConsoleOptions) {
 		super()
@@ -292,9 +293,16 @@ export class SerialConsole extends EventEmitter<SerialConsoleEvents> {
 		sendInput(this.requireSocket(), text)
 	}
 
-	/** Sends text followed by Enter. */
+	/**
+	 * Sends text followed by Enter, and moves the point the waits read from:
+	 * the cursor line still ends in the old prompt until the echo arrives,
+	 * so `waitForText` and `waitForPrompt` only look at output rendered after
+	 * this call.
+	 */
 	sendLine(text: string): void {
 		this.write(`${text}\r`)
+		this.sentMark?.marker?.dispose()
+		this.sentMark = this.mark()
 	}
 
 	sendKey(key: SerialKey): void {
@@ -334,26 +342,32 @@ export class SerialConsole extends EventEmitter<SerialConsoleEvents> {
 	}
 
 	/**
-	 * Resolves with the screen once `pattern` matches it. Throws
-	 * PveTimeoutError carrying the last screen when the deadline passes.
+	 * Resolves with the screen once `pattern` matches the text rendered since
+	 * the last `sendLine`, or the whole screen when nothing has been sent.
+	 * Throws PveTimeoutError carrying the last screen when the deadline
+	 * passes.
 	 */
 	waitForText(pattern: string | RegExp, options: SerialWaitOptions = {}): Promise<string> {
 		return this.waitFor(
 			`${describe(pattern)} on the serial console of guest ${this.vmid}`,
-			() => {
-				const screen = this.screen()
-				return matches(screen, pattern) ? screen : undefined
-			},
+			() => (matches(this.unread(), pattern) ? this.screen() : undefined),
 			options.timeoutMs,
 		)
 	}
 
-	/** Resolves with the screen once the line the cursor is on ends in a shell prompt. */
+	/**
+	 * Resolves with the screen once the line the cursor is on ends in a shell
+	 * prompt. After a `sendLine`, the prompt has to be rendered after the line
+	 * went out; the one the line was typed at does not count.
+	 */
 	waitForPrompt(options: PromptOptions = {}): Promise<string> {
 		const pattern = options.pattern ?? SHELL_PROMPT
 		return this.waitFor(
 			`a shell prompt on the serial console of guest ${this.vmid}`,
-			() => (matches(this.cursorLine(), pattern) ? this.screen() : undefined),
+			() => {
+				if (this.unread() === '') return undefined
+				return matches(this.cursorLine(), pattern) ? this.screen() : undefined
+			},
 			options.timeoutMs,
 		)
 	}
@@ -496,6 +510,25 @@ export class SerialConsole extends EventEmitter<SerialConsoleEvents> {
 			}
 			this.waiters.add(waiter)
 		})
+	}
+
+	/**
+	 * Text rendered since the last sendLine. Before any, or once the guest
+	 * has moved the cursor back above the mark by redrawing the screen, it
+	 * is the whole screen.
+	 */
+	private unread(): string {
+		const mark = this.sentMark
+		if (mark === undefined || this.cursorBefore(mark)) return this.screen()
+		return this.textSince(mark)
+	}
+
+	private cursorBefore(mark: Mark): boolean {
+		const marker = mark.marker
+		if (marker === undefined || marker.isDisposed) return false
+		const buffer = this.terminal.buffer.active
+		const line = buffer.baseY + buffer.cursorY
+		return line < marker.line || (line === marker.line && buffer.cursorX < mark.column)
 	}
 
 	private cursorLine(): string {
