@@ -10,6 +10,8 @@
  * status. Reach for `api` when the raw UPID is what you want.
  */
 
+import { PveTaskError } from '../core/errors.ts'
+import { pollUntil } from '../core/poll.ts'
 import type { TaskStatus } from '../core/tasks.ts'
 import type { QemuAgent } from '../guest/agent.ts'
 import type { GuestFirewallApi } from '../guest/firewall.ts'
@@ -66,6 +68,11 @@ import type { PveContext } from './context.ts'
 
 /** A guest handle of either type. Narrow it on `type`. */
 export type PveGuest = PveVm | PveContainer
+
+const LOCK_RETRY_MS = 45_000
+const LOCK_TIMEOUT = /can't lock file/
+
+type Attempt = { status: TaskStatus } | { error: PveTaskError }
 
 abstract class PveGuestBase {
 	abstract readonly type: GuestType
@@ -144,10 +151,43 @@ abstract class PveGuestBase {
 		return this.context.client.waitForTask(await call)
 	}
 
+	/**
+	 * Posts the call and waits for its task, posting again for up to 45 s
+	 * while the task fails on the guest's config lock. The node takes that
+	 * lock before it changes anything, so a task that lost it did nothing.
+	 * After a stop, qmeventd's `qm cleanup` holds it for up to 30 s once a
+	 * QEMU process with the same vmid is running again, which a delete and
+	 * recreate of one vmid runs into on the next power call.
+	 */
+	protected async retryOnLock(call: () => Promise<string>): Promise<TaskStatus> {
+		const attempt = await pollUntil<Attempt>(
+			async () => {
+				try {
+					return { status: await this.runTask(call()) }
+				} catch (error) {
+					if (error instanceof PveTaskError && LOCK_TIMEOUT.test(error.exitStatus ?? '')) {
+						return { error }
+					}
+					throw error
+				}
+			},
+			{
+				done: (value) => 'status' in value,
+				onTimeout: (value) => {
+					if ('error' in value) throw value.error
+					return value
+				},
+				timeoutMs: LOCK_RETRY_MS,
+			},
+		)
+		if ('error' in attempt) throw attempt.error
+		return attempt.status
+	}
+
 	/** Closes the consoles first: a destroyed guest's sockets go away underneath them. */
 	protected async destroy(call: () => Promise<string>): Promise<TaskStatus> {
 		await this.closeSessions()
-		return this.runTask(call())
+		return this.retryOnLock(call)
 	}
 }
 
@@ -197,37 +237,37 @@ export class PveVm extends PveGuestBase {
 
 	/** Starts the VM and waits for the task. Needs VM.PowerMgmt. */
 	start(params?: QemuStartParams): Promise<TaskStatus> {
-		return this.runTask(this.api.start(params))
+		return this.retryOnLock(() => this.api.start(params))
 	}
 
 	/** Kills the QEMU process without telling the OS, and waits for the task. Needs VM.PowerMgmt. */
 	stop(params?: QemuStopParams): Promise<TaskStatus> {
-		return this.runTask(this.api.stop(params))
+		return this.retryOnLock(() => this.api.stop(params))
 	}
 
 	/** Sends an ACPI power button event and waits for the OS to halt. Needs VM.PowerMgmt. */
 	shutdown(params?: QemuShutdownParams): Promise<TaskStatus> {
-		return this.runTask(this.api.shutdown(params))
+		return this.retryOnLock(() => this.api.shutdown(params))
 	}
 
 	/** Shuts the VM down and starts it again, applying pending changes. Needs VM.PowerMgmt. */
 	reboot(params?: QemuRebootParams): Promise<TaskStatus> {
-		return this.runTask(this.api.reboot(params))
+		return this.retryOnLock(() => this.api.reboot(params))
 	}
 
 	/** The reset button, as opposed to an OS reboot. Needs VM.PowerMgmt. */
 	reset(params?: QemuResetParams): Promise<TaskStatus> {
-		return this.runTask(this.api.reset(params))
+		return this.retryOnLock(() => this.api.reset(params))
 	}
 
 	/** Pauses the VM. `todisk: true` writes the RAM to storage and stops it. Needs VM.PowerMgmt. */
 	suspend(params?: QemuSuspendParams): Promise<TaskStatus> {
-		return this.runTask(this.api.suspend(params))
+		return this.retryOnLock(() => this.api.suspend(params))
 	}
 
 	/** Resumes a paused VM and waits for the task. Needs VM.PowerMgmt. */
 	resume(params?: QemuResumeParams): Promise<TaskStatus> {
-		return this.runTask(this.api.resume(params))
+		return this.retryOnLock(() => this.api.resume(params))
 	}
 
 	/**
@@ -313,32 +353,32 @@ export class PveContainer extends PveGuestBase {
 
 	/** Starts the container and waits for the task. Needs VM.PowerMgmt. */
 	start(params?: LxcStartParams): Promise<TaskStatus> {
-		return this.runTask(this.api.start(params))
+		return this.retryOnLock(() => this.api.start(params))
 	}
 
 	/** Kills the container without telling its init, and waits for the task. Needs VM.PowerMgmt. */
 	stop(params?: LxcStopParams): Promise<TaskStatus> {
-		return this.runTask(this.api.stop(params))
+		return this.retryOnLock(() => this.api.stop(params))
 	}
 
 	/** Asks the container's init to halt and waits for the task. Needs VM.PowerMgmt. */
 	shutdown(params?: LxcShutdownParams): Promise<TaskStatus> {
-		return this.runTask(this.api.shutdown(params))
+		return this.retryOnLock(() => this.api.shutdown(params))
 	}
 
 	/** Shuts the container down and starts it again, applying pending changes. Needs VM.PowerMgmt. */
 	reboot(params?: LxcRebootParams): Promise<TaskStatus> {
-		return this.runTask(this.api.reboot(params))
+		return this.retryOnLock(() => this.api.reboot(params))
 	}
 
 	/** Freezes the container and waits for the task. Needs VM.PowerMgmt. */
 	suspend(): Promise<TaskStatus> {
-		return this.runTask(this.api.suspend())
+		return this.retryOnLock(() => this.api.suspend())
 	}
 
 	/** Thaws a frozen container and waits for the task. Needs VM.PowerMgmt. */
 	resume(): Promise<TaskStatus> {
-		return this.runTask(this.api.resume())
+		return this.retryOnLock(() => this.api.resume())
 	}
 
 	/**

@@ -232,6 +232,15 @@ guest's websocket goes away underneath it. A container's `delete` also takes
 `force` for a running container, and its `suspend` freezes it; PVE marks that
 endpoint experimental.
 
+A task that fails with `can't lock file ... got timeout` did nothing: the
+node takes the guest's config lock before it changes anything. The power calls
+and `delete` on a handle post the task again for up to 45 seconds while it
+fails that way. The usual cause is `qm cleanup`, which qmeventd runs when a
+QEMU process exits and which holds the lock for up to 30 seconds when a
+process with the same vmid is running again, as happens when a VM is deleted
+and its vmid recreated straight away. `api.stop()` and the other module calls
+return the UPID and leave the retry to the caller.
+
 A start or stop task can finish before the guest has settled, so wait on the
 guest itself:
 

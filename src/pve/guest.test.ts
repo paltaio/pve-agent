@@ -43,6 +43,37 @@ describe('lifecycle calls wait for the task', () => {
 		await expect(cluster.vm(9000).start()).rejects.toBeInstanceOf(PveTaskError)
 	})
 
+	test('a task that lost the config lock is posted again until it runs', async () => {
+		const { cluster, reply, calls } = fixture()
+		const locked = {
+			status: 'stopped',
+			exitstatus: "can't lock file '/var/lock/qemu-server/lock-9000.conf' - got timeout",
+		}
+		for (let i = 0; i < 2; i += 1) {
+			reply({ data: UPID })
+			reply({ data: locked })
+			reply({ data: [{ n: 1, t: locked.exitstatus }] })
+		}
+		taskDone(reply)
+		const status = await cluster.vm(9000).stop()
+		expect(status.exitStatus).toBe('OK')
+		const posts = calls().filter((call) => call.method === 'POST')
+		expect(posts.map((call) => call.path)).toEqual([
+			`${VM}/status/stop`,
+			`${VM}/status/stop`,
+			`${VM}/status/stop`,
+		])
+	})
+
+	test('any other failure is thrown after one attempt', async () => {
+		const { cluster, reply, calls } = fixture()
+		reply({ data: UPID })
+		reply({ data: { status: 'stopped', exitstatus: 'VM quit/powerdown failed' } })
+		reply({ data: [] })
+		await expect(cluster.vm(9000).shutdown()).rejects.toBeInstanceOf(PveTaskError)
+		expect(calls().filter((call) => call.method === 'POST')).toHaveLength(1)
+	})
+
 	test('every power call hits its own endpoint with its parameters', async () => {
 		const { cluster, reply, calls } = fixture()
 		const vm = cluster.vm(9000)

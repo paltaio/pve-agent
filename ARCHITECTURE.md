@@ -527,6 +527,13 @@ and they carry no enums.
   `/bin/login` password prompt, an API token included.
 - The `pct` and `qm` config endpoints store a description with a trailing
   newline, so a snapshot description read back is `text + '\n'`.
+- When a QEMU process exits, qmeventd runs `qm cleanup`, which takes the
+  guest's config lock and, if a QEMU process with the same vmid is running
+  again, holds it for up to 30 s waiting for that one to exit. A caller that
+  deletes a VM and recreates the vmid inside that window gets `can't lock file
+  '/var/lock/qemu-server/lock-<vmid>.conf' - got timeout` from the next stop.
+  The lock is taken before anything changes, so the facade's power calls and
+  `delete` post the task again for up to 45 s while it fails that way.
 
 ## Consoles
 
