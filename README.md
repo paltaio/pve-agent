@@ -5,7 +5,7 @@ REST API through a generated registry of 537 endpoints, QEMU and LXC guests,
 the VNC and serial consoles, the QEMU guest agent, and a root shell on each
 node for the work the API has no endpoint for.
 
-- 537 endpoints from a PVE 9.2.11 schema, each with typed parameters and its
+- 537 endpoints from a PVE 9.2 schema, each with typed parameters and its
   privilege flags
 - QEMU and LXC guests behind one handle: lifecycle, config, snapshots, cloning,
   migration, firewall
@@ -29,6 +29,10 @@ Bun only.
 bun add pve-agent
 ```
 
+The package ships TypeScript source and uses Bun's `fetch`, `WebSocket` and
+`spawn`, so a consumer's `tsconfig.json` needs `"types": ["bun"]`; see
+[docs/getting-started.md](docs/getting-started.md).
+
 From a checkout:
 
 ```sh
@@ -45,7 +49,6 @@ Put them in the environment, or in a `pve.env` file:
 ```sh
 PVE_HOST=192.0.2.10
 PVE_PORT=8006
-PVE_VERIFY_SSL=0
 PVE_NODE=pve1
 
 # API token: reaches every endpoint except seventeen
@@ -58,12 +61,12 @@ PVE_USER=root@pam
 PVE_PASSWORD=...
 ```
 
-Resolution order: arguments to `pve.connect()`, then `process.env`, then the
-env file named by `envFile`, `PVE_ENV_FILE` or `./pve.env`. A line may start
-with `export `. The client picks the credential per call: the token first, the
-ticket for the endpoints that refuse a token, and a `root@pam` ticket for the
-endpoints and parameters whose handlers compare the caller against that name.
-See [docs/auth.md](docs/auth.md).
+The client picks the credential per call: the token first, the ticket for the
+endpoints that refuse a token, and a `root@pam` ticket for the endpoints and
+parameters whose handlers compare the caller against that name.
+[docs/getting-started.md](docs/getting-started.md) has the resolution order
+and every variable, including `PVE_VERIFY_SSL`; [docs/auth.md](docs/auth.md)
+has the tiers.
 
 The shell layer uses SSH as root with key authentication, or the termproxy
 websocket with a `root@pam` ticket:
@@ -124,7 +127,7 @@ await vm.delete({ purge: true })
 
 `pve.connect()` sends one `GET /version` and returns a `PveCluster`. Every
 node, guest and console handle hangs off it, and one `close()` tears down every
-socket and shell the cluster opened. `await using` calls it when the scope
+socket and shell the cluster opened; `await using` calls it when the scope
 ends.
 
 ```ts
@@ -132,30 +135,21 @@ import pve from 'pve-agent'
 
 await using cluster = await pve.connect()
 
-await cluster.version() // { version, release, repoid }
 await cluster.nodes() // every node with status and resource totals
 await cluster.list() // every guest, both types, sorted by vmid
-await cluster.nextId() // lowest free vmid at or above 100
-
 cluster.vm(100) // PveVm on PVE_NODE; cluster.vm(100, 'pve2') names the node
 cluster.container(110) // PveContainer, same rule
 await cluster.guest(100) // finds node and type with one GET /cluster/resources
 cluster.node('pve1') // PveNode; cluster.node() is PVE_NODE
-
 await cluster.createVm({ memory: '2048', scsi0: 'local-zfs:16' }) // waits for the create task
-await cluster.createContainer({
-	ostemplate: 'local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst',
-	rootfs: 'local-zfs:8',
-})
-
 cluster.api // ClusterApi: status, resources, ha, backup, firewall, pools, storage, replication
 cluster.access // AccessApi: users, groups, roles, ACLs, tokens, realms, TFA
 cluster.client // PveClient: any endpoint by path
 ```
 
 A VM handle covers the lifecycle, the config, snapshots, the guest agent and
-both consoles. Every lifecycle call waits for the worker task and returns its
-final status.
+both consoles. Every lifecycle call waits for the worker task, posting it again
+while the guest's config lock is held, and returns its final status.
 
 ```ts
 import pve from 'pve-agent'
@@ -163,13 +157,10 @@ import pve from 'pve-agent'
 await using cluster = await pve.connect()
 const vm = cluster.vm(100)
 
-await vm.status() // { status, runState, lock, pid, cpus, maxmem, tags, raw }
-await vm.config() // QemuConfig, with disks and nets parsed
 await vm.configure({ memory: '4096', cores: 2 }) // synchronous PUT
 await vm.start()
 await vm.waitFor('running')
 await vm.snapshot('before-upgrade')
-await vm.rollback('before-upgrade')
 await vm.guest.output(['uname', '-a']) // through the QEMU guest agent
 await (await vm.os).output('hostname -f') // the OS helper: Linux, macOS or Windows
 await vm.kvm.type('root\n') // keystrokes over VNC
@@ -203,9 +194,7 @@ const node = cluster.node('pve1')
 
 await node.status() // uptime, load, memory, kernel, PVE version, boot mode
 await node.api.network.list()
-await node.api.storage.list()
 await node.tasks() // worker tasks, newest first
-
 const shell = await node.shell // SSH, or termproxy with a root@pam ticket
 await shell.zfs.listPools()
 await shell.systemd.restart('pvestatd')
@@ -268,7 +257,9 @@ PVE_ENV_FILE=./pve.env bun run examples/cluster-state.ts
 | `snapshots.ts` | Snapshot a scratch VM, change its config, roll back, delete |
 | `zfs-shell.ts` | ZFS, systemd and apt through the root shell on a node |
 | `tasks-and-errors.ts` | Watch a task by UPID, read its log, then trigger each error class |
-| `end-to-end.ts` | One pass over the whole library against a live cluster |
+
+`examples/support.ts` holds what they share: the variables, the scratch-guest
+cleanup and the target VM helpers.
 
 ## Skill
 
@@ -278,42 +269,47 @@ library and its dependencies into every skills directory it finds under
 600:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/paltaio/pve-agent/main/install-pve-skill | bash
+git clone https://github.com/paltaio/pve-agent.git
+cd pve-agent
+set -a; . ./pve.env; set +a
+./install-pve-skill
 ```
 
 It reads `PVE_HOST`, `PVE_PORT`, `PVE_USER`, `PVE_PASSWORD`, `PVE_TOKEN_ID`,
-`PVE_TOKEN_SECRET`, `PVE_VERIFY_SSL` and `PVE_NODE` from the environment, and
-prompts for the missing ones when stdin is a terminal. `PVE_SKILL_REF` picks
-the branch or tag, `PVE_SKILL_SOURCE_DIR` installs from a local checkout, and
-`PVE_SKILL_OVERWRITE_ENV=1` replaces an existing `pve.env`. It needs `bun` and
-`git` on PATH.
+`PVE_TOKEN_SECRET`, `PVE_VERIFY_SSL` and `PVE_NODE` from the environment and
+asks on the terminal for the missing ones; without a terminal, `PVE_HOST` and
+one credential pair are required. Run from a checkout it installs that
+checkout; run from elsewhere it clones `PVE_SKILL_REF` (default `main`).
+`PVE_SKILL_SOURCE_DIR` names another checkout and `PVE_SKILL_OVERWRITE_ENV=1`
+replaces an existing `pve.env`. It needs `bun` and `git` on PATH.
 
 ## Development
 
 ```sh
 bun install
 bun test                # the offline suite; live tests report as skipped
-bun run typecheck       # tsc --noEmit over src, scripts and test
+bun run typecheck       # tsc --noEmit over src, scripts, test and examples
 bun run format          # oxfmt; format:check verifies without writing
 ```
 
 The live suite runs against a real cluster. It creates and deletes scratch
-guests, a scratch pool, a ZFS dataset and a user, and expects the nodes,
-storages and guests named at the top of `test/live/support.ts`:
+guests, a scratch pool, a ZFS dataset and a user. `test/live/support.ts` names
+the nodes, storages and guests it expects, each as a `PVE_LIVE_*` variable
+with a default, and skips a test whose fixture the cluster does not hold:
 
 ```sh
 set -a; . ./pve.env; set +a; PVE_LIVE=1 PVE_ENV_FILE=./pve.env bun test test/live
 ```
 
-`PVE_GUEST_PASSWORD` is the login password of the target VM's user, read from
-the environment or from the env file. `PVE_LIVE_ALL=1` adds the Windows and
-macOS groups, which boot and shut down whole desktops.
+`PVE_GUEST_PASSWORD`, the login password of the target VM's user, is read from
+the environment, so source the env file first. `PVE_LIVE_ALL=1` adds the
+Windows and macOS groups, which boot and shut down whole desktops.
 
 The registry in `src/generated` comes from `schema/apidoc.json`, dumped from a
 node running the version in `schema/pve-version.txt`:
 
 ```sh
-bun run schema root@pve1   # rewrites schema/ from the node
+bun run schema root@pve1        # rewrites schema/ from the node
 bun run generate                # rewrites src/generated from the schema
 ```
 
