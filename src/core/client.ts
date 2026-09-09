@@ -383,9 +383,10 @@ export class PveClient {
 		const decision = this.resolveDecision(method, path, params, options)
 
 		let response = await this.attempt(method, path, params, options, decision, 1)
-		if (response.status === 403 && decision.tier === 'ticket') {
-			// A ticket can go stale when roles change while it is cached. One fresh login
-			// separates a stale ticket from a real permission problem.
+		if (response.status === 401 && decision.tier === 'ticket') {
+			// The API server answers 401 for a ticket it no longer verifies, such
+			// as after a key rotation, and 403 only for a permission check that
+			// failed. One fresh login settles whether the ticket was the problem.
 			await this.auth.forceRefresh()
 			response = await this.attempt(method, path, params, options, decision, 2)
 		}
@@ -443,12 +444,9 @@ export class PveClient {
 		const decision = this.requiredTier(method, path, params)
 
 		if (!decision.endpoint && !options.allowUnknownEndpoint) {
-			throw new PveNotFoundError({
-				method,
-				path,
-				detail:
-					'no endpoint with this path is in the generated registry. Check the path, or pass { allowUnknownEndpoint: true } for a path the schema dump does not carry',
-			})
+			throw new PveConfigError(
+				`${method} ${path} is not in the generated endpoint registry. Check the path, or pass { allowUnknownEndpoint: true } for a path the schema dump does not carry.`,
+			)
 		}
 
 		const forced = options.tier !== undefined && options.tier !== decision.tier

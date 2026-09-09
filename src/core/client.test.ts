@@ -151,10 +151,10 @@ describe('credentials on the wire', () => {
 		expect(write?.headers['csrfpreventiontoken']).toBe('CSRF')
 	})
 
-	test('one 403 on a ticket call forces a fresh login and a single retry', async () => {
+	test('one 401 on a ticket call forces a fresh login and a single retry', async () => {
 		const traces: RequestTrace[] = []
 		const mock = mockClient({ token: false, onRequest: (trace) => traces.push(trace) })
-		mock.reply({ status: 403, body: '{"data":null,"message":"Permission check failed"}' })
+		mock.reply({ status: 401, body: '{"data":null}' })
 		mock.reply({ data: { version: '9.2' } })
 
 		await expect(mock.client.get('/version')).resolves.toEqual({ version: '9.2' })
@@ -167,19 +167,24 @@ describe('credentials on the wire', () => {
 		expect(traces.map((trace) => trace.attempt)).toEqual([1, 2])
 	})
 
-	test('a second 403 is a permission error', async () => {
+	test('a second 401 is an auth error', async () => {
 		const mock = mockClient({ token: false })
-		mock.reply({ status: 403, body: '{"data":null,"message":"Permission check failed"}' })
-		mock.reply({ status: 403, body: '{"data":null,"message":"Permission check failed"}' })
-		await expect(mock.client.get('/version')).rejects.toThrow(PvePermissionError)
+		mock.reply({ status: 401, body: '{"data":null}' })
+		mock.reply({ status: 401, body: '{"data":null}' })
+		await expect(mock.client.get('/version')).rejects.toThrow(PveAuthError)
 		expect(mock.calls()).toHaveLength(2)
 	})
 
-	test('a 403 on a token call is not retried', async () => {
-		const mock = mockClient()
-		mock.reply({ status: 403, body: '{"data":null}' })
-		await expect(mock.client.get('/version')).rejects.toThrow(PvePermissionError)
-		expect(mock.requests).toHaveLength(1)
+	test('a 403 is a permission error and is not retried on either tier', async () => {
+		const ticket = mockClient({ token: false })
+		ticket.reply({ status: 403, body: '{"data":null,"message":"Permission check failed"}' })
+		await expect(ticket.client.get('/version')).rejects.toThrow(PvePermissionError)
+		expect(ticket.calls()).toHaveLength(1)
+
+		const token = mockClient()
+		token.reply({ status: 403, body: '{"data":null}' })
+		await expect(token.client.get('/version')).rejects.toThrow(PvePermissionError)
+		expect(token.requests).toHaveLength(1)
 	})
 
 	test('a 401 names the tier the API rejected', async () => {
@@ -289,7 +294,7 @@ describe('tier selection', () => {
 
 	test('refuses a path outside the registry unless told otherwise', async () => {
 		const mock = mockClient()
-		await expect(mock.client.get('/nodes/ms01/typo')).rejects.toThrow(PveNotFoundError)
+		await expect(mock.client.get('/nodes/ms01/typo')).rejects.toThrow(PveConfigError)
 		expect(mock.requests).toHaveLength(0)
 		expect(mock.client.endpointFor('GET', '/nodes/ms01/typo')).toBeUndefined()
 
