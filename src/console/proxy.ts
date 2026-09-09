@@ -11,15 +11,9 @@
 import type { PveAuth } from '../core/auth.ts'
 import type { PveClient } from '../core/client.ts'
 import { PveConsoleError, type AuthTier } from '../core/errors.ts'
+import type { GuestRef, GuestType } from '../guest/types.ts'
 
-export type GuestType = 'qemu' | 'lxc'
-
-export interface GuestRef {
-	node: string
-	vmid: number
-	/** Defaults to qemu. */
-	type?: GuestType
-}
+export type { GuestRef, GuestType }
 
 /** What a node hands back when it spawns a VNC proxy worker. */
 export interface VncProxyTicket {
