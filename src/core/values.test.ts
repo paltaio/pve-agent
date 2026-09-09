@@ -6,6 +6,7 @@ import {
 	stringList,
 	toBoolean,
 	toOptionalBoolean,
+	toOptionalInteger,
 	toOptionalNumber,
 	toOptionalString,
 } from './values.ts'
@@ -65,8 +66,13 @@ describe('toOptionalNumber', () => {
 		expect(toOptionalNumber(0)).toBe(0)
 		expect(toOptionalNumber(-1.5)).toBe(-1.5)
 		expect(toOptionalNumber('42')).toBe(42)
-		expect(toOptionalNumber('1e3')).toBe(1000)
-		expect(toOptionalNumber('0x10')).toBe(16)
+		expect(toOptionalNumber('-0.25')).toBe(-0.25)
+	})
+
+	test('takes only a plain decimal numeral', () => {
+		for (const text of ['1e3', '0x10', '  ', ' 7', '7 ', '+7', '.5', '7.', 'Infinity']) {
+			expect(toOptionalNumber(text)).toBeUndefined()
+		}
 	})
 
 	test('says nothing for absent or unreadable values', () => {
@@ -75,8 +81,17 @@ describe('toOptionalNumber', () => {
 		expect(toOptionalNumber('')).toBeUndefined()
 		expect(toOptionalNumber('abc')).toBeUndefined()
 		expect(toOptionalNumber(Number.NaN)).toBeUndefined()
-		expect(toOptionalNumber('Infinity')).toBeUndefined()
 		expect(toOptionalNumber(true)).toBeUndefined()
+	})
+})
+
+describe('toOptionalInteger', () => {
+	test('reads whole numbers only', () => {
+		expect(toOptionalInteger('16')).toBe(16)
+		expect(toOptionalInteger(-3)).toBe(-3)
+		expect(toOptionalInteger('1.5')).toBeUndefined()
+		expect(toOptionalInteger(2.5)).toBeUndefined()
+		expect(toOptionalInteger('0x10')).toBeUndefined()
 	})
 })
 

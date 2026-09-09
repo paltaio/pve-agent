@@ -31,13 +31,24 @@ export function toBoolean(value: unknown): boolean {
 	return toOptionalBoolean(value) ?? false
 }
 
+/** A decimal numeral: an optional sign, digits, an optional fraction. */
+const DECIMAL = /^-?\d+(?:\.\d+)?$/
+
+/**
+ * A number PVE printed, read back. Only a plain decimal numeral counts:
+ * `Number()` would also take blanks, hex and exponents, none of which the API
+ * emits for a numeric field.
+ */
 export function toOptionalNumber(value: unknown): number | undefined {
 	if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
-	if (typeof value === 'string' && value.length > 0) {
-		const parsed = Number(value)
-		return Number.isFinite(parsed) ? parsed : undefined
-	}
+	if (typeof value === 'string' && DECIMAL.test(value)) return Number(value)
 	return undefined
+}
+
+/** The same, for a field that holds a whole number. */
+export function toOptionalInteger(value: unknown): number | undefined {
+	const parsed = toOptionalNumber(value)
+	return parsed !== undefined && Number.isInteger(parsed) ? parsed : undefined
 }
 
 export function toOptionalString(value: unknown): string | undefined {

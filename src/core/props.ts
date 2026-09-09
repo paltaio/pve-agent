@@ -22,7 +22,7 @@
 
 import type { PropertyFormat, PropertyFormatEntry } from '../generated/formats.ts'
 import { PvePropertyError } from './errors.ts'
-import { parseBoolean } from './values.ts'
+import { parseBoolean, toOptionalInteger, toOptionalNumber } from './values.ts'
 
 export type { PropertyFormat, PropertyFormatEntry }
 
@@ -81,14 +81,8 @@ export function parseSize(value: string): number | undefined {
 
 function coerce(raw: string, entry: PropertyFormatEntry | undefined): PropertyScalar {
 	if (entry?.type === 'boolean') return parseBoolean(raw) ?? raw
-	if (entry?.type === 'integer') {
-		const n = Number(raw)
-		return Number.isInteger(n) ? n : raw
-	}
-	if (entry?.type === 'number') {
-		const n = Number(raw)
-		return Number.isFinite(n) ? n : raw
-	}
+	if (entry?.type === 'integer') return toOptionalInteger(raw) ?? raw
+	if (entry?.type === 'number') return toOptionalNumber(raw) ?? raw
 	return raw
 }
 

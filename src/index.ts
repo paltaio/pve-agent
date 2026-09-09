@@ -134,6 +134,7 @@ export {
 	stringList,
 	toBoolean,
 	toOptionalBoolean,
+	toOptionalInteger,
 	toOptionalNumber,
 	toOptionalString,
 } from './core/values.ts'

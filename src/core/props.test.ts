@@ -64,6 +64,17 @@ describe('parsePropertyString', () => {
 		expect(bag['tag']).toBe('abc')
 	})
 
+	test('an integer sub-key takes digits only and a number sub-key a decimal', () => {
+		const format = formatFor(`${QEMU_CONFIG} net[n]`)
+		const read = (text: string): unknown =>
+			parsePropertyString(`virtio=BC:24:11:A1:B2:C3,${text}`, format)[text.split('=')[0] ?? '']
+		expect(read('tag=0x10')).toBe('0x10')
+		expect(read('tag=1e3')).toBe('1e3')
+		expect(read('tag=4.5')).toBe('4.5')
+		expect(read('rate=1e3')).toBe('1e3')
+		expect(read('rate=3')).toBe(3)
+	})
+
 	test('skips empty parts', () => {
 		const bag = parsePropertyString('local:1,,cache=none,', formatFor(`${QEMU_CONFIG} scsi[n]`))
 		expect(bag).toEqual({ file: 'local:1', cache: 'none' })
