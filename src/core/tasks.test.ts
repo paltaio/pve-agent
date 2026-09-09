@@ -161,6 +161,16 @@ describe('waitForTask', () => {
 		expect(mock.last().path).toBe(`${STATUS_PATH}/log?start=0&limit=0`)
 	})
 
+	test('errorLogLines: 0 attaches no log and reads none', async () => {
+		const mock = mockClient()
+		queueStatuses(mock, [{ status: 'stopped', exitstatus: 'no such volume' }])
+		const error = await waitForTask(mock.client, UPID, { errorLogLines: 0 }).catch(
+			(e: unknown) => e,
+		)
+		expect(error).toMatchObject({ upid: UPID, log: [] })
+		expect(mock.last().path).toBe(`${STATUS_PATH}/status`)
+	})
+
 	test('still throws when the log is gone', async () => {
 		const mock = mockClient()
 		queueStatuses(mock, [{ status: 'stopped', exitstatus: 'unexpected status' }])

@@ -269,10 +269,12 @@ export async function waitForTask(
 	if (!failed) return status
 
 	let log: string[] = []
-	try {
-		log = (await getTaskLog(client, upid)).slice(-errorLogLines)
-	} catch {
-		// The log can be gone already; the exit status still explains the failure.
+	if (errorLogLines > 0) {
+		try {
+			log = (await getTaskLog(client, upid)).slice(-errorLogLines)
+		} catch {
+			// The log can be gone already; the exit status still explains the failure.
+		}
 	}
 	throw new PveTaskError({ upid, exitStatus: status.exitStatus, log })
 }
