@@ -5,8 +5,10 @@
 #   curl -fsSL https://raw.githubusercontent.com/paltaio/pve-agent/main/install-pve-skill | bash
 #
 # Run inside a checkout it installs that checkout; run anywhere else it clones
-# the repository. Missing credentials are asked for on the terminal; without
-# one, PVE_HOST and a credential pair are required in the environment.
+# the repository. Credentials live in ${XDG_CONFIG_HOME:-~/.config}/pve-agent/pve.env
+# and every skill directory links to that file. Missing credentials are asked
+# for on the terminal; without one, PVE_HOST and a credential pair are required
+# in the environment. PVE_SKILL_OVERWRITE_ENV=1 rewrites an existing file.
 # A CLI counts as installed when its binary is on PATH or its config directory
 # exists. PVE_SKILL_TARGETS=claude,codex,/some/skills picks the targets by name
 # or skills directory; PVE_SKILL_LIST=1 prints the targets and exits.
@@ -15,6 +17,9 @@ set -euo pipefail
 repo_url="https://github.com/paltaio/pve-agent.git"
 repo_ref="${PVE_SKILL_REF:-main}"
 skill_name="pve-agent"
+env_dir="${XDG_CONFIG_HOME:-$HOME/.config}/pve-agent"
+env_file="$env_dir/pve.env"
+overwrite_env="${PVE_SKILL_OVERWRITE_ENV:-0}"
 work_dir=""
 staging=""
 previous=""
@@ -149,13 +154,26 @@ for entry in src schema; do
 	fi
 done
 
+mkdir -p "$env_dir"
+chmod 700 "$env_dir"
+
+# An install from before the shared file left a regular pve.env in the skill
+# directory; the first one found becomes the shared file.
+if [[ ! -f "$env_file" && "$overwrite_env" != "1" ]]; then
+	for target in "${targets[@]}"; do
+		if [[ -f "$target/pve.env" && ! -L "$target/pve.env" ]]; then
+			mv "$target/pve.env" "$env_file"
+			chmod 600 "$env_file"
+			break
+		fi
+	done
+	target=""
+fi
+
 need_env=0
-for target in "${targets[@]}"; do
-	if [[ ! -f "$target/pve.env" || "${PVE_SKILL_OVERWRITE_ENV:-0}" == "1" ]]; then
-		need_env=1
-	fi
-done
-target=""
+if [[ ! -f "$env_file" || "$overwrite_env" == "1" ]]; then
+	need_env=1
+fi
 
 tty_in=""
 if { : </dev/tty; } 2>/dev/null; then
@@ -221,10 +239,17 @@ if [[ "$need_env" -eq 1 ]]; then
 	)"
 fi
 
+if [[ "$need_env" -eq 1 ]]; then
+	(umask 077 && printf '%s\n' "$env_body" >"$env_file")
+	chmod 600 "$env_file"
+fi
+
 skill_text="$(<"$repo_dir/SKILL.md")"
 
 first_modules=""
-for target in "${targets[@]}"; do
+own_env=()
+for i in "${!targets[@]}"; do
+	target="${targets[$i]}"
 	staging="$target.tmp.$$"
 	rm -rf "$staging"
 	mkdir -p "${target%/*}" "$staging"
@@ -239,12 +264,16 @@ for target in "${targets[@]}"; do
 		(cd "$staging" && bun install --production --frozen-lockfile >/dev/null </dev/null)
 	fi
 
-	if [[ -f "$target/pve.env" && "${PVE_SKILL_OVERWRITE_ENV:-0}" != "1" ]]; then
+	# A regular pve.env with its own content stays unless it is overwritten;
+	# one identical to the shared file is replaced by the link.
+	if [[ -f "$target/pve.env" && ! -L "$target/pve.env" && "$overwrite_env" != "1" ]] &&
+		! cmp -s "$target/pve.env" "$env_file"; then
 		cp -p "$target/pve.env" "$staging/pve.env"
+		chmod 600 "$staging/pve.env"
+		own_env[i]=1
 	else
-		(umask 077 && printf '%s\n' "$env_body" > "$staging/pve.env")
+		ln -s "$env_file" "$staging/pve.env"
 	fi
-	chmod 600 "$staging/pve.env"
 
 	previous=""
 	if [[ -e "$target" ]]; then
@@ -262,7 +291,12 @@ for target in "${targets[@]}"; do
 done
 target=""
 
+echo "credentials: $env_file"
 echo "pve-agent skill installed in:"
 for i in "${!targets[@]}"; do
-	echo "  ${targets[$i]} (${root_names[$i]})"
+	if [[ "${own_env[$i]:-0}" == "1" ]]; then
+		echo "  ${targets[$i]} (${root_names[$i]}, own pve.env)"
+	else
+		echo "  ${targets[$i]} (${root_names[$i]})"
+	fi
 done

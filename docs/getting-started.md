@@ -9,8 +9,9 @@ curl -fsSL https://raw.githubusercontent.com/paltaio/pve-agent/main/install-pve-
 ```
 
 It asks for the PVE host and a credential pair, or reads `PVE_HOST` and the
-pair from the environment, and writes `pve.env` next to the skill. The README
-lists the CLIs it detects.
+pair from the environment, and writes them to `pve.env`. The installer keeps
+that file at `~/.config/pve-agent/pve.env` and links it from each skill
+directory, so editing it once is enough. The README lists the CLIs it detects.
 
 The library, as a dependency:
 

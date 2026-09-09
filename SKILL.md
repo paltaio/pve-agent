@@ -22,6 +22,9 @@ PVE_USER=root@pam
 PVE_PASSWORD=...
 ```
 
+The installer keeps the file at `~/.config/pve-agent/pve.env` and links it
+from each skill directory, so editing it once is enough.
+
 Resolution order: arguments to `pve.connect()`, then `process.env`, then the
 env file named by `envFile`, `PVE_ENV_FILE`, or `./pve.env` in the working
 directory. A line may start with `export `. `PVE_PORT` defaults to 8006.
