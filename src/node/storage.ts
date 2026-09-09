@@ -189,8 +189,6 @@ function normalizeFileRestoreEntry(raw: Record<string, unknown>): FileRestoreEnt
 	}
 }
 
-export type StorageUploadParams = NodesStorageUploadPostParams
-
 export class NodeStorageApi {
 	private readonly client: PveClient
 	private readonly base: string
@@ -314,7 +312,7 @@ export class NodeStorageApi {
 	 * took the request. `downloadUrl` is the better path when the file is
 	 * already reachable by URL. Returns a UPID.
 	 */
-	async upload(storage: string, file: Blob, params: StorageUploadParams): Promise<string> {
+	async upload(storage: string, file: Blob, params: NodesStorageUploadPostParams): Promise<string> {
 		// The server parses the multipart stream field by field in a fixed
 		// order: content, checksum-algorithm, checksum, then the file part,
 		// which has to be named 'filename'. Anything else fails the parse.

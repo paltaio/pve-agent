@@ -29,9 +29,6 @@ export interface Pool extends Record<string, unknown> {
 	members?: PoolMember[]
 }
 
-export type PoolCreateParams = PoolsPostParams
-export type PoolUpdateParams = PoolsPutParams
-
 export class PoolsApi {
 	readonly client: PveClient
 
@@ -63,7 +60,7 @@ export class PoolsApi {
 	}
 
 	/** Create an empty pool. A nested id needs its parent to exist. Returns nothing. */
-	async create(params: PoolCreateParams): Promise<void> {
+	async create(params: PoolsPostParams): Promise<void> {
 		await this.client.post<null>('/pools', params)
 	}
 
@@ -73,7 +70,7 @@ export class PoolsApi {
 	 * belongs to one pool at a time, so moving it out of another pool needs
 	 * `allow-move`. Returns nothing.
 	 */
-	async update(params: PoolUpdateParams): Promise<void> {
+	async update(params: PoolsPutParams): Promise<void> {
 		await this.client.put<null>('/pools', params)
 	}
 

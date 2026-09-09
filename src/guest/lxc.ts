@@ -62,13 +62,7 @@ export type LxcRebootParams = NodesLxcStatusRebootPostParams
 export type LxcDeleteParams = NodesLxcDeleteParams
 export type LxcCloneParams = NodesLxcClonePostParams
 export type LxcMigrateParams = NodesLxcMigratePostParams
-export type LxcMoveVolumeParams = NodesLxcMoveVolumePostParams
-export type LxcResizeParams = NodesLxcResizePutParams
 export type LxcSnapshotCreateParams = NodesLxcSnapshotPostParams
-export type LxcRrdOptions = NodesLxcRrddataGetParams
-export type LxcVncProxyParams = NodesLxcVncproxyPostParams
-export type LxcTermProxyParams = NodesLxcTermproxyPostParams
-export type LxcSpiceProxyParams = NodesLxcSpiceproxyPostParams
 
 /** A volume key a container can carry: rootfs, mp0..mp255 or unused0..unused255. */
 export type LxcVolumeKey = NodesLxcMoveVolumePostParams['volume']
@@ -94,7 +88,7 @@ export class LxcApi {
 	readonly client: PveClient
 	readonly node: string
 	readonly vmid: number
-	/** The container's API path, such as /nodes/ms02-0078/lxc/110. */
+	/** The container's API path, such as /nodes/pve1/lxc/110. */
 	readonly path: string
 	readonly snapshots: GuestSnapshotsApi<LxcSnapshotCreateParams>
 	readonly firewall: GuestFirewallApi
@@ -223,7 +217,7 @@ export class LxcApi {
 	 * container with `target-vmid`. Returns a UPID. The original stays as
 	 * `unused[n]` unless `delete` is set.
 	 */
-	async moveVolume(params: LxcMoveVolumeParams): Promise<string> {
+	async moveVolume(params: NodesLxcMoveVolumePostParams): Promise<string> {
 		return this.client.post<string>(`${this.path}/move_volume`, params)
 	}
 
@@ -231,7 +225,7 @@ export class LxcApi {
 	 * Grows a volume. Returns a UPID. `size` is absolute, or relative with a
 	 * leading `+`, as in `'+8G'`. Shrinking is refused.
 	 */
-	async resize(params: LxcResizeParams): Promise<string> {
+	async resize(params: NodesLxcResizePutParams): Promise<string> {
 		return this.client.put<string>(`${this.path}/resize`, params)
 	}
 
@@ -263,21 +257,21 @@ export class LxcApi {
 	 * file does not exist yet, which is the case for the first minute after
 	 * the container is created.
 	 */
-	async rrddata(options: LxcRrdOptions): Promise<RrdPoint[]> {
+	async rrddata(options: NodesLxcRrddataGetParams): Promise<RrdPoint[]> {
 		return this.client.get<RrdPoint[]>(`${this.path}/rrddata`, options)
 	}
 
 	/** Spawns a VNC proxy worker. The console module wraps this with the credential handling the socket needs. */
-	async vncProxy(params: LxcVncProxyParams = {}): Promise<Record<string, unknown>> {
+	async vncProxy(params: NodesLxcVncproxyPostParams = {}): Promise<Record<string, unknown>> {
 		return this.client.post<Record<string, unknown>>(`${this.path}/vncproxy`, params)
 	}
 
 	/** Spawns a terminal proxy on the container's console. */
-	async termProxy(params: LxcTermProxyParams = {}): Promise<Record<string, unknown>> {
+	async termProxy(params: NodesLxcTermproxyPostParams = {}): Promise<Record<string, unknown>> {
 		return this.client.post<Record<string, unknown>>(`${this.path}/termproxy`, params)
 	}
 
-	async spiceProxy(params: LxcSpiceProxyParams = {}): Promise<Record<string, unknown>> {
+	async spiceProxy(params: NodesLxcSpiceproxyPostParams = {}): Promise<Record<string, unknown>> {
 		return this.client.post<Record<string, unknown>>(`${this.path}/spiceproxy`, params)
 	}
 }

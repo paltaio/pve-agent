@@ -17,11 +17,6 @@ import type {
 	ClusterBulkActionGuestSuspendPostParams,
 } from '../generated/types.ts'
 
-export type BulkMigrateParams = ClusterBulkActionGuestMigratePostParams
-export type BulkStartParams = ClusterBulkActionGuestStartPostParams
-export type BulkShutdownParams = ClusterBulkActionGuestShutdownPostParams
-export type BulkSuspendParams = ClusterBulkActionGuestSuspendPostParams
-
 export class ClusterBulkApi {
 	readonly client: PveClient
 
@@ -34,12 +29,12 @@ export class ClusterBulkApi {
 	 * `with-local-disks` copies local volumes along with the guest. Returns a
 	 * UPID.
 	 */
-	async migrate(params: BulkMigrateParams): Promise<string> {
+	async migrate(params: ClusterBulkActionGuestMigratePostParams): Promise<string> {
 		return this.client.post<string>('/cluster/bulk-action/guest/migrate', params)
 	}
 
 	/** Start or resume guests. `timeout` is per guest. Returns a UPID. */
-	async start(params?: BulkStartParams): Promise<string> {
+	async start(params?: ClusterBulkActionGuestStartPostParams): Promise<string> {
 		return this.client.post<string>('/cluster/bulk-action/guest/start', params)
 	}
 
@@ -47,7 +42,7 @@ export class ClusterBulkApi {
 	 * Shut guests down. `force-stop` defaults to on and pulls the plug on a
 	 * guest that has not stopped within `timeout` seconds. Returns a UPID.
 	 */
-	async shutdown(params?: BulkShutdownParams): Promise<string> {
+	async shutdown(params?: ClusterBulkActionGuestShutdownPostParams): Promise<string> {
 		return this.client.post<string>('/cluster/bulk-action/guest/shutdown', params)
 	}
 
@@ -56,7 +51,7 @@ export class ClusterBulkApi {
 	 * releases the RAM; without it the guests stay paused in memory. Returns a
 	 * UPID.
 	 */
-	async suspend(params?: BulkSuspendParams): Promise<string> {
+	async suspend(params?: ClusterBulkActionGuestSuspendPostParams): Promise<string> {
 		return this.client.post<string>('/cluster/bulk-action/guest/suspend', params)
 	}
 }

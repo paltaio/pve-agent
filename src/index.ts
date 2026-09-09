@@ -6,7 +6,7 @@
  * import pve from 'pve-agent'
  *
  * await using cluster = await pve.connect()
- * const vm = await cluster.createVm({ node: 'ms01-0160', memory: '2048', scsi0: 'local-zfs:16' })
+ * const vm = await cluster.createVm({ node: 'pve1', memory: '2048', scsi0: 'local-zfs:16' })
  * await vm.start()
  * await vm.kvm.type('root\n')
  * ```
@@ -180,12 +180,7 @@ export type {
 	UnbackedGuest,
 } from './cluster/backup.ts'
 export { ClusterBulkApi } from './cluster/bulk.ts'
-export type {
-	BulkMigrateParams,
-	BulkShutdownParams,
-	BulkStartParams,
-	BulkSuspendParams,
-} from './cluster/bulk.ts'
+export type {} from './cluster/bulk.ts'
 export { ClusterApi, nextVmid } from './cluster/cluster.ts'
 export type {
 	ClusterLogEntry,
@@ -193,7 +188,7 @@ export type {
 	ClusterStatusEntry,
 	GuestLocation,
 } from './cluster/cluster.ts'
-export { envelopeTotal, getEnvelope } from './cluster/envelope.ts'
+export { getEnvelope } from './cluster/envelope.ts'
 export {
 	ClusterFirewallApi,
 	FirewallRulesApi,
@@ -240,13 +235,7 @@ export type {
 	NotificationTargetOrigin,
 } from './cluster/notifications.ts'
 export { PoolsApi } from './cluster/pools.ts'
-export type {
-	Pool,
-	PoolCreateParams,
-	PoolMember,
-	PoolMemberType,
-	PoolUpdateParams,
-} from './cluster/pools.ts'
+export type { Pool, PoolMember, PoolMemberType } from './cluster/pools.ts'
 export { ClusterReplicationApi } from './cluster/replication.ts'
 export type { ReplicationJob } from './cluster/replication.ts'
 export { StorageConfigApi } from './cluster/storage.ts'
@@ -313,7 +302,6 @@ export type {
 	PruneCandidate,
 	StorageStatus,
 	StorageStatusEntry,
-	StorageUploadParams,
 	VolumeAttributes,
 	VolumeEntry,
 } from './node/storage.ts'
@@ -350,16 +338,7 @@ export type {
 	ListGuestsOptions,
 } from './guest/discovery.ts'
 export { GuestFirewallApi } from './guest/firewall.ts'
-export type {
-	GuestFirewallAliasCreateParams,
-	GuestFirewallAliasUpdateParams,
-	GuestFirewallIpsetCreateParams,
-	GuestFirewallIpsetEntryCreateParams,
-	GuestFirewallIpsetEntryUpdateParams,
-	GuestFirewallLogOptions,
-	GuestFirewallOptionsParams,
-	GuestFirewallRefsOptions,
-} from './guest/firewall.ts'
+export type {} from './guest/firewall.ts'
 export { destroyGuest, getStatus, powerAction, waitForRunState } from './guest/lifecycle.ts'
 export type { PowerAction, WaitForStateOptions } from './guest/lifecycle.ts'
 export { listContainers, LxcApi } from './guest/lxc.ts'
@@ -368,43 +347,28 @@ export type {
 	LxcDeleteParams,
 	LxcInterface,
 	LxcMigrateParams,
-	LxcMoveVolumeParams,
 	LxcRebootParams,
-	LxcResizeParams,
-	LxcRrdOptions,
 	LxcShutdownParams,
 	LxcSnapshotCreateParams,
-	LxcSpiceProxyParams,
 	LxcStartParams,
 	LxcStopParams,
-	LxcTermProxyParams,
-	LxcVncProxyParams,
 	LxcVolumeKey,
 } from './guest/lxc.ts'
 export { listVms, QemuApi } from './guest/qemu.ts'
 export type {
 	CloudinitDumpType,
-	CloudinitPendingRow,
 	QemuCloneParams,
 	QemuDeleteParams,
 	QemuDiskKey,
 	QemuMigrateParams,
-	QemuMoveDiskParams,
 	QemuRebootParams,
 	QemuResetParams,
-	QemuResizeParams,
 	QemuResumeParams,
-	QemuRrdOptions,
 	QemuShutdownParams,
 	QemuSnapshotCreateParams,
-	QemuSpiceProxyParams,
 	QemuStartParams,
 	QemuStopParams,
 	QemuSuspendParams,
-	QemuTemplateParams,
-	QemuTermProxyParams,
-	QemuUnlinkParams,
-	QemuVncProxyParams,
 } from './guest/qemu.ts'
 export { GuestSnapshotsApi } from './guest/snapshots.ts'
 export type { SnapshotDeleteOptions, SnapshotRollbackOptions } from './guest/snapshots.ts'
@@ -504,7 +468,6 @@ export {
 	consoleAuthHeaders,
 	consoleTier,
 	consoleWebSocketUrl,
-	guestBasePath,
 	requestTermProxy,
 	requestVncProxy,
 } from './console/proxy.ts'

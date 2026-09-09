@@ -38,15 +38,6 @@ export type {
 	FirewallRuleUpdateParams,
 } from '../cluster/firewall.ts'
 
-export type GuestFirewallOptionsParams = NodesQemuFirewallOptionsPutParams
-export type GuestFirewallAliasCreateParams = NodesQemuFirewallAliasesPostParams
-export type GuestFirewallAliasUpdateParams = NodesQemuFirewallAliasesPutParams
-export type GuestFirewallIpsetCreateParams = NodesQemuFirewallIpsetPostByNodeVmidParams
-export type GuestFirewallIpsetEntryCreateParams = NodesQemuFirewallIpsetPostByNodeVmidNameParams
-export type GuestFirewallIpsetEntryUpdateParams = NodesQemuFirewallIpsetPutParams
-export type GuestFirewallLogOptions = NodesQemuFirewallLogGetParams
-export type GuestFirewallRefsOptions = NodesQemuFirewallRefsGetParams
-
 /**
  * Every call is synchronous and returns no UPID. Reads need VM.Audit, writes
  * need VM.Config.Network; an API token reaches all of them.
@@ -70,7 +61,7 @@ export class GuestFirewallApi {
 	}
 
 	/** Change per-guest settings. `enable: true` turns the guest firewall on. `delete` unsets keys. */
-	async setOptions(params: GuestFirewallOptionsParams): Promise<void> {
+	async setOptions(params: NodesQemuFirewallOptionsPutParams): Promise<void> {
 		await this.client.put<null>(`${this.base}/options`, params)
 	}
 
@@ -82,16 +73,16 @@ export class GuestFirewallApi {
 		return this.client.get<FirewallAlias>(this.aliasPath(name))
 	}
 
-	async createAlias(params: GuestFirewallAliasCreateParams): Promise<void> {
+	async createAlias(params: NodesQemuFirewallAliasesPostParams): Promise<void> {
 		await this.client.post<null>(`${this.base}/aliases`, params)
 	}
 
 	/** Change an alias, or rename it with `rename`. */
-	async updateAlias(name: string, params: GuestFirewallAliasUpdateParams): Promise<void> {
+	async updateAlias(name: string, params: NodesQemuFirewallAliasesPutParams): Promise<void> {
 		await this.client.put<null>(this.aliasPath(name), params)
 	}
 
-	async deleteAlias(name: string, options: { digest?: string } = {}): Promise<void> {
+	async deleteAlias(name: string, options: { digest?: string | undefined } = {}): Promise<void> {
 		await this.client.delete<null>(this.aliasPath(name), options)
 	}
 
@@ -100,7 +91,7 @@ export class GuestFirewallApi {
 	}
 
 	/** Create an IPSet, or rename one with `rename`. */
-	async createIpset(params: GuestFirewallIpsetCreateParams): Promise<void> {
+	async createIpset(params: NodesQemuFirewallIpsetPostByNodeVmidParams): Promise<void> {
 		await this.client.post<null>(`${this.base}/ipset`, params)
 	}
 
@@ -115,7 +106,10 @@ export class GuestFirewallApi {
 	}
 
 	/** Add a CIDR, IP or alias to an IPSet. */
-	async addIpsetEntry(name: string, params: GuestFirewallIpsetEntryCreateParams): Promise<void> {
+	async addIpsetEntry(
+		name: string,
+		params: NodesQemuFirewallIpsetPostByNodeVmidNameParams,
+	): Promise<void> {
 		await this.client.post<null>(this.ipsetPath(name), params)
 	}
 
@@ -128,7 +122,7 @@ export class GuestFirewallApi {
 	async updateIpsetEntry(
 		name: string,
 		cidr: string,
-		params: GuestFirewallIpsetEntryUpdateParams,
+		params: NodesQemuFirewallIpsetPutParams,
 	): Promise<void> {
 		await this.client.put<null>(this.ipsetEntryPath(name, cidr), params)
 	}
@@ -136,18 +130,18 @@ export class GuestFirewallApi {
 	async deleteIpsetEntry(
 		name: string,
 		cidr: string,
-		options: { digest?: string } = {},
+		options: { digest?: string | undefined } = {},
 	): Promise<void> {
 		await this.client.delete<null>(this.ipsetEntryPath(name, cidr), options)
 	}
 
 	/** Firewall log lines for this guest, oldest first. Only rules with `log` set appear. */
-	async log(options: GuestFirewallLogOptions = {}): Promise<PveLogLine[]> {
+	async log(options: NodesQemuFirewallLogGetParams = {}): Promise<PveLogLine[]> {
 		return this.client.get<PveLogLine[]>(`${this.base}/log`, options)
 	}
 
 	/** Aliases and IPSets a rule on this guest may refer to, at guest and datacenter scope. */
-	async listRefs(options: GuestFirewallRefsOptions = {}): Promise<FirewallRef[]> {
+	async listRefs(options: NodesQemuFirewallRefsGetParams = {}): Promise<FirewallRef[]> {
 		return this.client.get<FirewallRef[]>(`${this.base}/refs`, options)
 	}
 

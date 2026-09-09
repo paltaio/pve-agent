@@ -72,31 +72,12 @@ export type QemuResumeParams = NodesQemuStatusResumePostParams
 export type QemuDeleteParams = NodesQemuDeleteParams
 export type QemuCloneParams = NodesQemuClonePostParams
 export type QemuMigrateParams = NodesQemuMigratePostParams
-export type QemuMoveDiskParams = NodesQemuMoveDiskPostParams
-export type QemuResizeParams = NodesQemuResizePutParams
-export type QemuUnlinkParams = NodesQemuUnlinkPutParams
-export type QemuTemplateParams = NodesQemuTemplatePostParams
 export type QemuSnapshotCreateParams = NodesQemuSnapshotPostParams
-export type QemuRrdOptions = NodesQemuRrddataGetParams
-export type QemuVncProxyParams = NodesQemuVncproxyPostParams
-export type QemuTermProxyParams = NodesQemuTermproxyPostParams
-export type QemuSpiceProxyParams = NodesQemuSpiceproxyPostParams
 
 /** A disk key a VM can carry, such as scsi0, virtio1, efidisk0 or unused3. */
 export type QemuDiskKey = NodesQemuMoveDiskPostParams['disk']
 
 export type CloudinitDumpType = 'user' | 'network' | 'meta'
-
-/** One row of the cloudinit endpoint, comparing the generated drive to the config. */
-export interface CloudinitPendingRow {
-	key: string
-	/** Value used to build the drive that is attached now. */
-	value: string | undefined
-	/** Value that a regenerate would use. */
-	pending: string | undefined
-	delete: number | undefined
-	raw: Readonly<Record<string, unknown>>
-}
 
 /**
  * Virtual machines on one node. `full: true` adds the status fields the node
@@ -119,7 +100,7 @@ export class QemuApi {
 	readonly client: PveClient
 	readonly node: string
 	readonly vmid: number
-	/** The VM's API path, such as /nodes/ms01-0160/qemu/9001. */
+	/** The VM's API path, such as /nodes/pve1/qemu/100. */
 	readonly path: string
 	readonly snapshots: GuestSnapshotsApi<QemuSnapshotCreateParams>
 	readonly firewall: GuestFirewallApi
@@ -282,7 +263,7 @@ export class QemuApi {
 	 * `target-vmid`. Returns a UPID. The original stays as `unused[n]` unless
 	 * `delete` is set.
 	 */
-	async moveDisk(params: QemuMoveDiskParams): Promise<string> {
+	async moveDisk(params: NodesQemuMoveDiskPostParams): Promise<string> {
 		return this.client.post<string>(`${this.path}/move_disk`, params)
 	}
 
@@ -290,7 +271,7 @@ export class QemuApi {
 	 * Grows a disk. Returns a UPID. `size` is absolute, or relative with a
 	 * leading `+`, as in `'+8G'`. Shrinking is refused.
 	 */
-	async resize(params: QemuResizeParams): Promise<string> {
+	async resize(params: NodesQemuResizePutParams): Promise<string> {
 		return this.client.put<string>(`${this.path}/resize`, params)
 	}
 
@@ -300,7 +281,7 @@ export class QemuApi {
 	 */
 	async unlink(
 		disks: string | readonly string[],
-		options: Omit<QemuUnlinkParams, 'idlist'> = {},
+		options: Omit<NodesQemuUnlinkPutParams, 'idlist'> = {},
 	): Promise<void> {
 		await this.client.put<null>(`${this.path}/unlink`, { ...options, idlist: joinKeyList(disks) })
 	}
@@ -309,7 +290,7 @@ export class QemuApi {
 	 * Converts the VM into a template, which makes its disks read-only.
 	 * Returns a UPID. `disk` converts a single disk instead of all of them.
 	 */
-	async toTemplate(params: QemuTemplateParams = {}): Promise<string> {
+	async toTemplate(params: NodesQemuTemplatePostParams = {}): Promise<string> {
 		return this.client.post<string>(`${this.path}/template`, params)
 	}
 
@@ -333,16 +314,13 @@ export class QemuApi {
 		return this.client.post<string>(`${this.path}/monitor`, { command })
 	}
 
-	/** Cloud-init keys, comparing the drive attached now against what a regenerate would produce. */
-	async cloudinit(): Promise<CloudinitPendingRow[]> {
+	/**
+	 * Cloud-init keys, comparing the drive attached now (`value`) against what
+	 * a regenerate would produce (`pending`).
+	 */
+	async cloudinit(): Promise<PendingChange[]> {
 		const rows = await this.client.get<Record<string, unknown>[]>(`${this.path}/cloudinit`)
-		return rows.map((row) => ({
-			key: String(row['key'] ?? ''),
-			value: row['value'] === undefined ? undefined : String(row['value']),
-			pending: row['pending'] === undefined ? undefined : String(row['pending']),
-			delete: typeof row['delete'] === 'number' ? row['delete'] : undefined,
-			raw: row,
-		}))
+		return normalizePending(rows)
 	}
 
 	/** Rebuilds the cloud-init drive from the current config. Synchronous. The guest reads it at the next boot. */
@@ -369,22 +347,22 @@ export class QemuApi {
 	 * does not exist yet, which is the case for the first minute after the VM
 	 * is created.
 	 */
-	async rrddata(options: QemuRrdOptions): Promise<RrdPoint[]> {
+	async rrddata(options: NodesQemuRrddataGetParams): Promise<RrdPoint[]> {
 		return this.client.get<RrdPoint[]>(`${this.path}/rrddata`, options)
 	}
 
 	/** Spawns a VNC proxy worker. The console module wraps this with the credential handling the socket needs. */
-	async vncProxy(params: QemuVncProxyParams = {}): Promise<Record<string, unknown>> {
+	async vncProxy(params: NodesQemuVncproxyPostParams = {}): Promise<Record<string, unknown>> {
 		return this.client.post<Record<string, unknown>>(`${this.path}/vncproxy`, params)
 	}
 
 	/** Spawns a terminal proxy on the VM's serial console. */
-	async termProxy(params: QemuTermProxyParams = {}): Promise<Record<string, unknown>> {
+	async termProxy(params: NodesQemuTermproxyPostParams = {}): Promise<Record<string, unknown>> {
 		return this.client.post<Record<string, unknown>>(`${this.path}/termproxy`, params)
 	}
 
 	/** SPICE connection settings for a VM with a SPICE display. */
-	async spiceProxy(params: QemuSpiceProxyParams = {}): Promise<Record<string, unknown>> {
+	async spiceProxy(params: NodesQemuSpiceproxyPostParams = {}): Promise<Record<string, unknown>> {
 		return this.client.post<Record<string, unknown>>(`${this.path}/spiceproxy`, params)
 	}
 }
