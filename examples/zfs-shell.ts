@@ -15,15 +15,7 @@
  */
 
 import pve, { NodeShell } from '../src/index.ts'
-
-function env(name: string, fallback?: string): string {
-	const value = process.env[name] ?? fallback
-	if (value === undefined) {
-		console.error(`usage: ${name}=... PVE_ENV_FILE=./pve.env bun run examples/zfs-shell.ts`)
-		process.exit(1)
-	}
-	return value
-}
+import { env, EXAMPLE_PREFIX } from './support.ts'
 
 function gib(bytes: number | undefined): string {
 	return bytes === undefined ? '-' : `${(bytes / 1024 ** 3).toFixed(1)}G`
@@ -31,7 +23,7 @@ function gib(bytes: number | undefined): string {
 
 const POOL = env('PVE_ZFS_POOL', 'rpool')
 const WRITE = process.env['PVE_ZFS_WRITE'] === '1'
-const DATASET = `${POOL}/pve-agent-example`
+const DATASET = `${POOL}/${EXAMPLE_PREFIX}dataset`
 
 await using cluster = await pve.connect()
 const node = cluster.node(process.env['PVE_NODE'])

@@ -8,44 +8,20 @@
  *
  * Reads PVE_NODE (default: the PVE_NODE of the env file), PVE_VMID (default
  * 9011) and PVE_SHOT_DIR, the directory the PNGs land in (default: the
- * system temp directory). A guest already holding PVE_VMID is deleted first,
- * and the VM is deleted before the script exits, after a failure too.
+ * system temp directory). An example guest already holding PVE_VMID is
+ * deleted first, and the VM is deleted before the script exits, after a
+ * failure too.
  */
 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import pve, { PveNotFoundError, type PveCluster, type PveVm } from '../src/index.ts'
+import pve, { type PveVm } from '../src/index.ts'
+import { env, EXAMPLE_PREFIX, MINUTE, removeGuest, SECOND } from './support.ts'
 
-const SECOND = 1000
-const MINUTE = 60 * SECOND
 const SPLASH_ORANGE = '#e57000'
-
-function env(name: string, fallback?: string): string {
-	const value = process.env[name] ?? fallback
-	if (value === undefined) {
-		console.error(`usage: ${name}=... PVE_ENV_FILE=./pve.env bun run examples/install-over-kvm.ts`)
-		process.exit(1)
-	}
-	return value
-}
 
 const VMID = Number(env('PVE_VMID', '9011'))
 const SHOT_DIR = env('PVE_SHOT_DIR', tmpdir())
-
-async function removeGuest(cluster: PveCluster, vmid: number): Promise<void> {
-	let guest
-	try {
-		guest = await cluster.guest(vmid)
-	} catch (error) {
-		if (error instanceof PveNotFoundError) return
-		throw error
-	}
-	if ((await guest.status()).runState !== 'stopped') {
-		await guest.stop()
-		await guest.waitFor('stopped', { timeoutMs: 2 * MINUTE })
-	}
-	await guest.delete({ purge: true, 'destroy-unreferenced-disks': true })
-}
 
 async function save(vm: PveVm, name: string): Promise<void> {
 	const shot = await vm.kvm.screenshot({ format: 'png', fresh: true })
@@ -62,7 +38,7 @@ await removeGuest(cluster, VMID)
 const vm = await cluster.createVm({
 	node,
 	vmid: VMID,
-	name: 'pve-agent-example-kvm',
+	name: `${EXAMPLE_PREFIX}kvm`,
 	memory: '512',
 	cores: 1,
 	ostype: 'l26',
