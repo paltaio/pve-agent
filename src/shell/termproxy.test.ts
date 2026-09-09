@@ -14,7 +14,7 @@ import { FakePty, type FakePtyOptions } from './test-support.ts'
 
 afterEach(closeMockClients)
 
-const PROXY = { port: 5900, ticket: 'VNCTICKET', user: 'root@pam', upid: 'UPID:x' }
+const PROXY = { port: 5900, ticket: 'VNCTICKET', user: 'root@pam' }
 
 function transportFor(
 	mock: MockClient,

@@ -4,7 +4,6 @@ import {
 	consoleAuthHeaders,
 	consoleTier,
 	consoleWebSocketUrl,
-	guestBasePath,
 	requestTermProxy,
 	requestVncProxy,
 } from './proxy.ts'
@@ -86,8 +85,15 @@ describe('consoleWebSocketUrl', () => {
 		)
 	})
 
-	test('defaults the guest type to qemu', () => {
-		expect(guestBasePath({ node: 'ms01', vmid: 100 })).toBe('/nodes/ms01/qemu/100')
+	test('takes a path in place of a guest, for a node shell', async () => {
+		const mock = mockClient()
+		mock.reply({ data: { port: 5901, ticket: 'T', user: 'root@pam' } })
+		const ticket = await requestTermProxy(mock.client, '/nodes/pve1')
+		expect(mock.last().path).toBe('/nodes/pve1/termproxy')
+		expect(ticket.port).toBe('5901')
+		expect(consoleWebSocketUrl('https://pve:8006', '/nodes/pve1', '5901', 'T')).toBe(
+			'wss://pve:8006/api2/json/nodes/pve1/vncwebsocket?port=5901&vncticket=T',
+		)
 	})
 })
 

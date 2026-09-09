@@ -11,7 +11,7 @@
  */
 
 import type { PveClient } from '../core/client.ts'
-import { consoleAuthHeaders } from '../console/proxy.ts'
+import { consoleAuthHeaders, consoleWebSocketUrl, requestTermProxy } from '../console/proxy.ts'
 import { KEEPALIVE_FRAME, loginFrame, resizeFrame, sendInput } from '../console/pty.ts'
 import { openWebSocket, type ConsoleSocket, type SocketFactory } from '../console/socket.ts'
 import type { PveShellError } from '../core/errors.ts'
@@ -39,12 +39,6 @@ export interface TermproxyOptions {
 	maxOutputBytes?: number
 	/** Replaced by tests. */
 	socketFactory?: SocketFactory
-}
-
-interface TermproxyTicket {
-	user: string
-	ticket: string
-	port: number | string
 }
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 20_000
@@ -111,15 +105,10 @@ export class TermproxyTransport implements ShellTransport {
 			throw new PveShellCredentialError(this.node, credentialMessage(this.node, client))
 		}
 
-		const proxy = await client.post<TermproxyTicket>(
-			`/nodes/${this.node}/termproxy`,
-			{},
-			{ tier: 'ticket' },
-		)
+		const target = `/nodes/${encodeURIComponent(this.node)}`
+		const proxy = await requestTermProxy(client, target)
 		const headers = await consoleAuthHeaders(client.auth)
-		const authority = client.baseUrl.replace(/^https?:\/\//, '')
-		const query = `port=${encodeURIComponent(String(proxy.port))}&vncticket=${encodeURIComponent(proxy.ticket)}`
-		const url = `wss://${authority}/api2/json/nodes/${this.node}/vncwebsocket?${query}`
+		const url = consoleWebSocketUrl(client.baseUrl, target, proxy.port, proxy.ticket)
 
 		const factory = this.options.socketFactory ?? openWebSocket
 		const socket = factory(url, { headers, verifySsl: client.http.verifySsl })

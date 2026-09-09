@@ -12,9 +12,12 @@ import type { PveAuth } from '../core/auth.ts'
 import type { PveClient } from '../core/client.ts'
 import { PveConsoleError, type AuthTier } from '../core/errors.ts'
 import type { NodesQemuTermproxyPostParams } from '../generated/types.ts'
-import type { GuestRef, GuestType } from '../guest/types.ts'
+import { guestPath, type GuestRef, type GuestType } from '../guest/types.ts'
 
 export type { GuestRef, GuestType }
+
+/** A guest, or the API path of whatever else spawns a proxy worker, such as `/nodes/pve1`. */
+export type ConsoleTarget = GuestRef | string
 
 /** A VM serial port a terminal proxy can attach to. */
 export type SerialPort = NonNullable<NodesQemuTermproxyPostParams['serial']>
@@ -47,8 +50,8 @@ export interface VncProxyTicket {
 	upid?: string
 }
 
-export function guestBasePath(guest: GuestRef): string {
-	return `/nodes/${guest.node}/${guest.type ?? 'qemu'}/${guest.vmid}`
+function targetPath(target: ConsoleTarget): string {
+	return typeof target === 'string' ? target : guestPath(target)
 }
 
 /**
@@ -59,13 +62,9 @@ export async function requestVncProxy(client: PveClient, guest: GuestRef): Promi
 	const params: Record<string, boolean> = { websocket: true }
 	if ((guest.type ?? 'qemu') === 'qemu') params['generate-password'] = true
 
-	const raw = await client.post<Record<string, unknown>>(
-		`${guestBasePath(guest)}/vncproxy`,
-		params,
-		{
-			tier: consoleTier(client.auth),
-		},
-	)
+	const raw = await client.post<Record<string, unknown>>(`${guestPath(guest)}/vncproxy`, params, {
+		tier: consoleTier(client.auth),
+	})
 	const ticket: VncProxyTicket = {
 		port: readString(raw, 'port', 'vncproxy'),
 		ticket: readString(raw, 'ticket', 'vncproxy'),
@@ -79,16 +78,17 @@ export async function requestVncProxy(client: PveClient, guest: GuestRef): Promi
 }
 
 /**
- * Spawns a terminal proxy worker for a guest. Its stream runs over
- * vncwebsocket like the VNC one, with the framing `pty.ts` describes.
+ * Spawns a terminal proxy worker for a guest, or for a node when given its
+ * path. Its stream runs over vncwebsocket like the VNC one, with the framing
+ * `pty.ts` describes.
  */
 export async function requestTermProxy(
 	client: PveClient,
-	guest: GuestRef,
+	target: ConsoleTarget,
 	params: TermProxyParams = {},
 ): Promise<TermProxyTicket> {
 	const raw = await client.post<Record<string, unknown>>(
-		`${guestBasePath(guest)}/termproxy`,
+		`${targetPath(target)}/termproxy`,
 		params,
 		{ tier: consoleTier(client.auth) },
 	)
@@ -104,13 +104,13 @@ export async function requestTermProxy(
 /** The vncwebsocket URL for a proxy worker. */
 export function consoleWebSocketUrl(
 	baseUrl: string,
-	guest: GuestRef,
+	target: ConsoleTarget,
 	port: string,
 	vncticket: string,
 ): string {
 	const authority = baseUrl.replace(/^https?:\/\//, '')
 	const query = `port=${encodeURIComponent(port)}&vncticket=${encodeURIComponent(vncticket)}`
-	return `wss://${authority}/api2/json${guestBasePath(guest)}/vncwebsocket?${query}`
+	return `wss://${authority}/api2/json${targetPath(target)}/vncwebsocket?${query}`
 }
 
 /** The credential the proxy call and the socket share. */
