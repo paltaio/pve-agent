@@ -8,7 +8,7 @@ import {
 	setSystemTime,
 	test,
 } from 'bun:test'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PveAuth, loadCredentials, type PveCredentials } from './auth.ts'
@@ -33,15 +33,20 @@ beforeEach(() => {
 	for (const key of PVE_KEYS) delete process.env[key]
 })
 
+const tempDirs: string[] = []
+
 afterEach(() => {
 	for (const [key, value] of savedEnv) {
 		if (value === undefined) delete process.env[key]
 		else process.env[key] = value
 	}
+	for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
 async function envFile(contents: string): Promise<string> {
-	const path = join(mkdtempSync(join(tmpdir(), 'pve-agent-')), 'pve.env')
+	const dir = mkdtempSync(join(tmpdir(), 'pve-agent-'))
+	tempDirs.push(dir)
+	const path = join(dir, 'pve.env')
 	await Bun.write(path, contents)
 	return path
 }
