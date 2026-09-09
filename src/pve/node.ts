@@ -32,6 +32,11 @@ export class PveNode {
 		return this.context.nodeShell(this.name)
 	}
 
+	/** Closes the shell on this node, if one is open. The next `shell` opens a new one. */
+	closeShell(): Promise<void> {
+		return this.context.closeNodeShell(this.name)
+	}
+
 	/** Uptime, load, CPU and memory use, kernel and PVE versions, root filesystem usage and boot mode. */
 	status(): Promise<NodeStatus> {
 		return this.api.status()

@@ -23,6 +23,8 @@ export interface PveContext {
 	readonly client: PveClient
 	/** A root shell on a node, opened on first use and shared from then on. */
 	nodeShell(node: string): Promise<NodeShell>
+	/** Closes the shell on a node, if one is open or opening. */
+	closeNodeShell(node: string): Promise<void>
 	/** The VNC session of a guest, opened on first use and shared from then on. */
 	vncSession(ref: Required<GuestRef>): Promise<VncSession>
 	/** Closes the VNC session of a guest, if one is open or opening. */

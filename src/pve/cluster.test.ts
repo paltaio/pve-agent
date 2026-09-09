@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { PveAuthError, PveConfigError, PveNotFoundError } from '../core/errors.ts'
 import { closeMockClients, formFields, mockClient } from '../core/test-support/api-mock.ts'
 import type { GuestRef } from '../guest/types.ts'
-import { PveShellCredentialError } from '../shell/errors.ts'
+import { PveShellCredentialError, PveShellTransportError } from '../shell/errors.ts'
 import { connect, PveCluster, type PveClusterOptions } from './cluster.ts'
 import { PveContainer, PveVm } from './guest.ts'
 import { fakeSockets, fakeSsh } from './test-support.ts'
@@ -215,6 +215,36 @@ describe('sessions', () => {
 		expect(await first.output('hostname')).toBe('ms01-0160')
 		expect(ssh.commands.filter((line) => line.endsWith(' true'))).toHaveLength(1)
 		expect(ssh.commands.every((line) => line.includes('root@ms01-0160'))).toBe(true)
+	})
+
+	test('a closed shell is dropped, and closeNodeShell closes the one that is open', async () => {
+		const ssh = fakeSsh({ hostname: { stdout: 'ms01-0160\n' } })
+		const { cluster } = fixture({ shell: { ssh: { spawn: ssh.spawn } } })
+		const first = await cluster.nodeShell('ms01-0160')
+		await first.close()
+		const second = await cluster.nodeShell('ms01-0160')
+		expect(second).not.toBe(first)
+		await cluster.closeNodeShell('ms01-0160')
+		await cluster.closeNodeShell('ms01-0160')
+		expect(await cluster.nodeShell('ms01-0160')).not.toBe(second)
+	})
+
+	test('a shell whose transport fails is dropped', async () => {
+		let attempts = 0
+		const ssh = fakeSsh({
+			hostname: () => {
+				attempts += 1
+				return attempts === 1
+					? { exitCode: 255, stderr: 'ssh: connect to host ms01-0160 port 22: Connection refused' }
+					: { stdout: 'ms01-0160\n' }
+			},
+		})
+		const { cluster } = fixture({ shell: { ssh: { spawn: ssh.spawn } } })
+		const first = await cluster.nodeShell('ms01-0160')
+		await expect(first.output('hostname')).rejects.toBeInstanceOf(PveShellTransportError)
+		const second = await cluster.nodeShell('ms01-0160')
+		expect(second).not.toBe(first)
+		expect(await second.output('hostname')).toBe('ms01-0160')
 	})
 
 	test('a shell that fails to open is not kept, so the next call tries again', async () => {

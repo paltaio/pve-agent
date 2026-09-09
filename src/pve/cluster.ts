@@ -224,13 +224,19 @@ export class PveCluster implements PveContext {
 	}
 
 	nodeShell(node: string): Promise<NodeShell> {
-		return this.shells.open(node, () => {
+		return this.shells.open(node, async (forget) => {
 			const options: NodeShellOptions = { node, client: this.client }
 			if (this.shellDefaults.ssh) options.ssh = this.shellDefaults.ssh
 			if (this.shellDefaults.transport) options.transport = this.shellDefaults.transport
 			if (this.shellDefaults.policy) options.policy = this.shellDefaults.policy
-			return NodeShell.open(options)
+			const shell = await NodeShell.open(options)
+			shell.onClose(forget)
+			return shell
 		})
+	}
+
+	async closeNodeShell(node: string): Promise<void> {
+		await (await this.shells.take(node))?.close()
 	}
 
 	vncSession(ref: Required<GuestRef>): Promise<VncSession> {

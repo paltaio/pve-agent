@@ -115,8 +115,14 @@ export function fakeSockets(options: FakeSocketOptions = {}): {
 	return { factory, urls, vnc, ptys }
 }
 
+export interface SshReply {
+	stdout?: string
+	stderr?: string
+	exitCode?: number
+}
+
 /** The reply an ssh invocation gets, keyed by a fragment of its argument line. */
-export type SshReplies = Record<string, { stdout?: string; stderr?: string; exitCode?: number }>
+export type SshReplies = Record<string, SshReply | (() => SshReply)>
 
 /**
  * An ssh binary answered from the first reply whose key the argument line
@@ -130,7 +136,8 @@ export function fakeSsh(replies: SshReplies = {}): { spawn: SpawnFn; commands: s
 		const command = request.argv.join(' ')
 		commands.push(command)
 		const key = Object.keys(replies).find((fragment) => command.includes(fragment))
-		const reply = key === undefined ? {} : (replies[key] ?? {})
+		const found = key === undefined ? {} : (replies[key] ?? {})
+		const reply = typeof found === 'function' ? found() : found
 		return {
 			exitCode: reply.exitCode ?? 0,
 			stdout: encoder.encode(reply.stdout ?? ''),

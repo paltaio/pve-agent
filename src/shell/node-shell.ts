@@ -7,7 +7,7 @@
  */
 
 import type { PveClient } from '../core/client.ts'
-import { PveShellCredentialError, PveShellPolicyError } from './errors.ts'
+import { PveShellCredentialError, PveShellPolicyError, PveShellTransportError } from './errors.ts'
 import { PctShell } from './lxc.ts'
 import { AptShell } from './packages.ts'
 import { CommandPolicy, commandPrograms } from './policy.ts'
@@ -50,6 +50,9 @@ export class NodeShell {
 	readonly qm: QmShell
 	readonly pct: PctShell
 
+	private readonly closeListeners: (() => void)[] = []
+	private closed = false
+
 	constructor(transport: ShellTransport, policy: ShellPolicy = {}) {
 		this.node = transport.node
 		this.transport = transport
@@ -89,7 +92,12 @@ export class NodeShell {
 				})
 			}
 		}
-		return this.transport.run(command, options)
+		try {
+			return await this.transport.run(command, options)
+		} catch (error) {
+			if (error instanceof PveShellTransportError) this.notifyClosed()
+			throw error
+		}
 	}
 
 	/** Run a command and return its trimmed stdout, throwing when it exits non-zero. */
@@ -108,8 +116,23 @@ export class NodeShell {
 		return this.transport.download(remotePath, localPath)
 	}
 
-	close(): Promise<void> {
-		return this.transport.close()
+	/**
+	 * Called once, when the shell is closed or its transport fails to carry a
+	 * command. A holder that caches shells drops this one on it.
+	 */
+	onClose(listener: () => void): void {
+		this.closeListeners.push(listener)
+	}
+
+	async close(): Promise<void> {
+		this.notifyClosed()
+		await this.transport.close()
+	}
+
+	private notifyClosed(): void {
+		if (this.closed) return
+		this.closed = true
+		for (const listener of this.closeListeners) listener()
 	}
 }
 
