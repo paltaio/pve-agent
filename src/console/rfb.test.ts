@@ -200,6 +200,13 @@ describe('parseServerMessage', () => {
 		})
 	})
 
+	test('a length prefix near 2^32 comes back as the byte count, without overflowing', () => {
+		const cut = Buffer.concat([Buffer.from([3, 0, 0, 0]), bytes('ffffffff')])
+		expect(parseServerMessage(cut)).toBe(8 + 0xffffffff)
+		const refused = Buffer.concat([Buffer.from([0]), bytes('fffffffe')])
+		expect(parseSecurityTypes(refused)).toBe(5 + 0xfffffffe)
+	})
+
 	test('rejects an unknown type', () => {
 		expect(() => parseServerMessage(bytes('fa'))).toThrow(/Unknown RFB server message type 250/)
 	})
@@ -248,6 +255,29 @@ describe('parseRectangle', () => {
 		expect(() => parseRectangle(buf, screen)).toThrow(/does not fit the 4x4 framebuffer/)
 		const copy = Buffer.concat([header(0, 0, 2, 1, RFB_ENCODING_COPYRECT), bytes('00030000')])
 		expect(() => parseRectangle(copy, screen)).toThrow(/CopyRect source/)
+	})
+
+	test('rejects an oversized Raw rectangle from its header, before waiting for its pixels', () => {
+		const head = header(0, 0, 65535, 65535, RFB_ENCODING_RAW)
+		expect(() => parseRectangle(head, screen)).toThrow(/does not fit the 4x4 framebuffer/)
+		const copy = header(3, 3, 2, 2, RFB_ENCODING_COPYRECT)
+		expect(() => parseRectangle(copy, screen)).toThrow(/CopyRect destination/)
+	})
+
+	test('a zero-sized rectangle is complete with its header', () => {
+		expect(parseRectangle(header(4, 4, 0, 0, RFB_ENCODING_RAW), screen)).toEqual({
+			value: { encoding: 'raw', x: 4, y: 4, w: 0, h: 0, data: Buffer.alloc(0) },
+			length: 12,
+		})
+		expect(parseRectangle(header(0, 0, 0, 0, RFB_ENCODING_DESKTOP_SIZE), screen)).toEqual({
+			value: { encoding: 'resize', width: 0, height: 0 },
+			length: 12,
+		})
+	})
+
+	test('a CopyRect cut after its header asks for the source position', () => {
+		const buf = Buffer.concat([header(0, 0, 2, 2, RFB_ENCODING_COPYRECT), bytes('0000')])
+		expect(parseRectangle(buf, screen)).toBe(16)
 	})
 
 	test('rejects an encoding it cannot decode', () => {

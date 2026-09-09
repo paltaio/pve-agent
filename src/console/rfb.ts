@@ -237,16 +237,16 @@ export function parseRectangle(buf: Buffer, screen: ScreenSize): ParseResult<Rec
 
 	switch (encoding) {
 		case RFB_ENCODING_RAW: {
+			checkBounds(screen, x, y, w, h, 'Raw')
 			const length = 12 + w * h * 4
 			if (buf.length < length) return length
-			checkBounds(screen, x, y, w, h, 'Raw')
 			return { value: { encoding: 'raw', x, y, w, h, data: buf.subarray(12, length) }, length }
 		}
 		case RFB_ENCODING_COPYRECT: {
+			checkBounds(screen, x, y, w, h, 'CopyRect destination')
 			if (buf.length < 16) return 16
 			const srcX = buf.readUInt16BE(12)
 			const srcY = buf.readUInt16BE(14)
-			checkBounds(screen, x, y, w, h, 'CopyRect destination')
 			checkBounds(screen, srcX, srcY, w, h, 'CopyRect source')
 			return { value: { encoding: 'copy', x, y, w, h, srcX, srcY }, length: 16 }
 		}
