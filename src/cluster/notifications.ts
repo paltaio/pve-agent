@@ -8,7 +8,7 @@
  */
 
 import type { PveClient } from '../core/client.ts'
-import { toOptionalBoolean, toOptionalString } from '../core/values.ts'
+import { stringList, toOptionalBoolean, toOptionalString } from '../core/values.ts'
 import type {
 	ClusterNotificationsEndpointsGotifyPostParams,
 	ClusterNotificationsEndpointsGotifyPutParams,
@@ -64,10 +64,6 @@ export interface NotificationMatcher {
 	/** Send when the rules do not match instead of when they do. */
 	invertMatch: boolean | undefined
 	raw: Readonly<Record<string, unknown>>
-}
-
-function stringList(value: unknown): string[] {
-	return Array.isArray(value) ? value.map(String) : []
 }
 
 function normalizeMatcher(raw: Record<string, unknown>): NotificationMatcher {

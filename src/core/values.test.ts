@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import {
+	isRecord,
 	parseBoolean,
 	parseTagList,
+	stringList,
 	toBoolean,
 	toOptionalBoolean,
 	toOptionalNumber,
@@ -108,5 +110,24 @@ describe('parseTagList', () => {
 		expect(parseTagList(undefined)).toEqual([])
 		expect(parseTagList(null)).toEqual([])
 		expect(parseTagList(3)).toEqual([])
+	})
+})
+
+describe('isRecord', () => {
+	test('accepts a plain object and nothing else', () => {
+		expect(isRecord({})).toBe(true)
+		expect(isRecord({ a: 1 })).toBe(true)
+		expect(isRecord([])).toBe(false)
+		expect(isRecord(null)).toBe(false)
+		expect(isRecord('x')).toBe(false)
+	})
+})
+
+describe('stringList', () => {
+	test('keeps the strings of an array and splits a delimited string', () => {
+		expect(stringList(['a', 'b', 3, null])).toEqual(['a', 'b'])
+		expect(stringList('a;b,c')).toEqual(['a', 'b', 'c'])
+		expect(stringList(undefined)).toEqual([])
+		expect(stringList(7)).toEqual([])
 	})
 })

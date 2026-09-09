@@ -18,7 +18,12 @@
  */
 
 import type { PveClient } from '../core/client.ts'
-import { toOptionalBoolean, toOptionalNumber, toOptionalString } from '../core/values.ts'
+import {
+	stringList,
+	toOptionalBoolean,
+	toOptionalNumber,
+	toOptionalString,
+} from '../core/values.ts'
 import type { NetworkCreateParams, NetworkUpdateParams } from '../generated/types.ts'
 import { getEnvelope } from '../cluster/envelope.ts'
 
@@ -63,10 +68,6 @@ export interface NetworkInterface {
 	/** Order the interfaces are brought up in. */
 	priority: number | undefined
 	raw: Readonly<Record<string, unknown>>
-}
-
-function stringList(value: unknown): string[] {
-	return Array.isArray(value) ? value.map(String) : []
 }
 
 function normalizeInterface(raw: Record<string, unknown>): NetworkInterface {

@@ -58,3 +58,13 @@ export function parseTagList(value: unknown): string[] {
 	if (typeof value !== 'string' || value.length === 0) return []
 	return value.split(TAG_SEPARATOR).filter((tag) => tag.length > 0)
 }
+
+/**
+ * A list PVE sends either as a JSON array or as one delimited string. Array
+ * items that are not strings are dropped.
+ */
+export function stringList(value: unknown): string[] {
+	if (!Array.isArray(value)) return parseTagList(value)
+	const items: unknown[] = value
+	return items.filter((item): item is string => typeof item === 'string')
+}

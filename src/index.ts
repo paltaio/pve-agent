@@ -128,8 +128,10 @@ export type {
 	WaitOptions,
 } from './core/tasks.ts'
 export {
+	isRecord,
 	parseBoolean,
 	parseTagList,
+	stringList,
 	toBoolean,
 	toOptionalBoolean,
 	toOptionalNumber,

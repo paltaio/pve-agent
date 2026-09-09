@@ -20,7 +20,7 @@ import type { CredentialInput } from '../core/auth.ts'
 import { PveClient, type RequestTrace } from '../core/client.ts'
 import {
 	isRecord,
-	parseTagList,
+	stringList,
 	toOptionalBoolean,
 	toOptionalNumber,
 	toOptionalString,
@@ -182,13 +182,6 @@ function record(value: unknown): Raw {
 function records(value: unknown): Raw[] {
 	const items: unknown[] = Array.isArray(value) ? value : []
 	return items.filter(isRecord)
-}
-
-/** A list PVE sends either as an array or as one delimited string. */
-function stringList(value: unknown): string[] {
-	if (!Array.isArray(value)) return parseTagList(value)
-	const items: unknown[] = value
-	return items.filter((item): item is string => typeof item === 'string')
 }
 
 function normalizeToken(raw: Raw, tokenid = ''): ApiToken {
