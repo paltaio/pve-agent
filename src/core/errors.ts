@@ -256,6 +256,22 @@ export class GuestCommandError extends PveError {
 	}
 }
 
+/**
+ * The guest agent stopped a command's output at its cap, so a value read
+ * from that output is incomplete.
+ */
+export class GuestOutputTruncatedError extends PveError {
+	readonly vmid: number
+
+	constructor(args: { vmid: number; what: string }) {
+		super(
+			'guest-command',
+			`${args.what} in guest ${args.vmid} produced more output than the agent carries in one command, so the result is incomplete`,
+		)
+		this.vmid = args.vmid
+	}
+}
+
 /** Which way the root-shell layer failed. */
 export type ShellErrorKind =
 	/** No credential can open a root shell on the node. */

@@ -61,6 +61,7 @@ export type {
 } from './core/client.ts'
 export {
 	GuestCommandError,
+	GuestOutputTruncatedError,
 	PveApiError,
 	PveAuthError,
 	PveConfigError,

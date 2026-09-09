@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import {
 	GuestCommandError,
+	GuestOutputTruncatedError,
 	PveApiError,
 	PveConfigError,
 	PveError,
@@ -24,8 +25,9 @@ import {
 	waitForAgent,
 } from './guest-os.ts'
 import { LinuxGuest } from './linux.ts'
+import { POSIX_WRITE_CHUNK_BYTES } from './posix.ts'
 import type { GuestExecutor, GuestRunResult } from './types.ts'
-import { psEncode, WindowsGuest } from './windows.ts'
+import { psEncode, WINDOWS_WRITE_CHUNK_BYTES, WindowsGuest } from './windows.ts'
 
 afterEach(closeMockClients)
 
@@ -46,6 +48,7 @@ function fakeExecutor(reply: (argv: readonly string[]) => Partial<GuestRunResult
 				stdout: answer.stdout ?? '',
 				stderr: answer.stderr ?? '',
 				timedOut: answer.timedOut ?? false,
+				truncated: answer.truncated ?? false,
 			}
 		},
 	}
@@ -76,8 +79,16 @@ describe('qemuAgentExecutor', () => {
 			stdout: 'out',
 			stderr: 'err',
 			timedOut: false,
+			truncated: false,
 		})
 		expect((await executor.exec(['sleep'])).exitCode).toBe(137)
+	})
+
+	test('a truncated stream is reported on the result', async () => {
+		const mock = mockClient()
+		mock.reply({ data: { pid: 1 } })
+		mock.reply({ data: { exited: 1, exitcode: 0, 'out-data': 'x', 'out-truncated': 1 } })
+		expect((await qemuAgentExecutor(agentOn(mock)).exec(['cat'])).truncated).toBe(true)
 	})
 
 	test('a command still running at the deadline comes back as timed out', async () => {
@@ -106,7 +117,13 @@ describe('pctExecutor', () => {
 		})
 		const result = await pctExecutor(new NodeShell(transport), VMID).exec(['/bin/echo', 'a b'])
 		expect(transport.commands[0]).toBe("pct exec 9060 -- /bin/echo 'a b'")
-		expect(result).toEqual({ exitCode: 3, stdout: 'out', stderr: '', timedOut: false })
+		expect(result).toEqual({
+			exitCode: 3,
+			stdout: 'out',
+			stderr: '',
+			timedOut: false,
+			truncated: false,
+		})
 	})
 
 	test('a shell timeout comes back as a timed out result', async () => {
@@ -129,7 +146,13 @@ describe('pctExecutor', () => {
 		const result = await pctExecutor(new NodeShell(transport), VMID).exec(['sleep', '60'], {
 			timeoutMs: 10,
 		})
-		expect(result).toEqual({ exitCode: -1, stdout: 'partial', stderr: '', timedOut: true })
+		expect(result).toEqual({
+			exitCode: -1,
+			stdout: 'partial',
+			stderr: '',
+			timedOut: true,
+			truncated: false,
+		})
 	})
 })
 
@@ -187,6 +210,39 @@ describe('LinuxGuest', () => {
 		})
 		expect(calls[0]?.[2]).toContain("| sudo -n tee '/etc/it'\\''s.conf' > /dev/null")
 		expect(calls[1]?.[2]).toBe("sudo -n chmod 0600 '/etc/it'\\''s.conf'")
+	})
+
+	test('a file the agent cut short is an error, not a shorter file', async () => {
+		const { executor } = fakeExecutor(() => ({ stdout: 'aGVsbG8=', truncated: true }))
+		const error = await new LinuxGuest(executor).readFile('/big').catch((caught: unknown) => caught)
+		expect(error).toBeInstanceOf(GuestOutputTruncatedError)
+		if (error instanceof GuestOutputTruncatedError) {
+			expect(error.vmid).toBe(VMID)
+			expect(error.message).toContain('read /big')
+		}
+	})
+
+	test('a write larger than one argument carries goes over in chunks that append', async () => {
+		const { executor, calls } = fakeExecutor()
+		const content = Buffer.alloc(POSIX_WRITE_CHUNK_BYTES * 2 + 1, 7)
+		await new LinuxGuest(executor).writeFile('/tmp/big', content, { sudo: true })
+		expect(calls).toHaveLength(3)
+		const lines = calls.map((argv) => argv[2] ?? '')
+		expect(lines[0]).toContain(
+			`printf %s ${content.subarray(0, POSIX_WRITE_CHUNK_BYTES).toString('base64')} |`,
+		)
+		expect(lines[0]).toEndWith('| sudo -n tee /tmp/big > /dev/null')
+		expect(lines[1]).toEndWith('| sudo -n tee -a /tmp/big > /dev/null')
+		expect(lines[2]).toContain(`printf %s ${Buffer.from([7]).toString('base64')} |`)
+		expect(lines[2]).toEndWith('| sudo -n tee -a /tmp/big > /dev/null')
+		for (const line of lines) expect(line.length).toBeLessThan(128 * 1024)
+	})
+
+	test('an empty write still creates the file with one command', async () => {
+		const { executor, calls } = fakeExecutor()
+		await new LinuxGuest(executor).writeFile('/tmp/empty', '')
+		expect(calls).toHaveLength(1)
+		expect(calls[0]?.[2]).toContain("printf %s '' |")
 	})
 
 	test('a file read decodes what the guest printed', async () => {
@@ -300,6 +356,27 @@ describe('WindowsGuest', () => {
 		expect(script).toContain("[IO.File]::WriteAllBytes('C:\\temp\\o''brien.txt', ")
 		expect(script).toContain(
 			`FromBase64String('${Buffer.from('say "hi" \u00e9').toString('base64')}')`,
+		)
+	})
+
+	test('a large write is split so each encoded command line stays under the Windows limit', async () => {
+		const { executor, calls } = fakeExecutor()
+		const content = Buffer.alloc(WINDOWS_WRITE_CHUNK_BYTES + 1, 9)
+		await new WindowsGuest(executor).writeFile('C:\\temp\\big.bin', content)
+		expect(calls).toHaveLength(2)
+		const first = encodedScript(calls[0])
+		const second = encodedScript(calls[1])
+		expect(first).toContain("[IO.File]::WriteAllBytes('C:\\temp\\big.bin', ")
+		expect(first).toContain(content.subarray(0, WINDOWS_WRITE_CHUNK_BYTES).toString('base64'))
+		expect(second).toContain("[IO.File]::Open('C:\\temp\\big.bin', [IO.FileMode]::Append)")
+		expect(second).toContain(`FromBase64String('${Buffer.from([9]).toString('base64')}')`)
+		for (const argv of calls) expect(argv.join(' ').length).toBeLessThan(32767)
+	})
+
+	test('a read the agent cut short is an error', async () => {
+		const { executor } = fakeExecutor(() => ({ stdout: 'aGVsbG8=', truncated: true }))
+		await expect(new WindowsGuest(executor).readFile('C:\\big')).rejects.toBeInstanceOf(
+			GuestOutputTruncatedError,
 		)
 	})
 

@@ -4,7 +4,7 @@
  */
 
 import { shQuote } from '../shell/escape.ts'
-import { checkResult } from './executor.ts'
+import { checkResult, checkWholeOutput } from './executor.ts'
 import type {
 	GuestExecutor,
 	GuestOs,
@@ -20,6 +20,12 @@ export interface PosixWriteFileOptions extends GuestRunOptions {
 	/** Write through `sudo -n`, which fails rather than asking for a password. */
 	sudo?: boolean
 }
+
+/**
+ * Bytes per write command. The base64 of a chunk is one argument of the
+ * `/bin/sh -c` line, and Linux caps an argument at 128 KiB.
+ */
+export const POSIX_WRITE_CHUNK_BYTES = 48 * 1024
 
 export abstract class PosixGuest implements GuestOs {
 	abstract readonly os: GuestOsKind
@@ -61,7 +67,7 @@ export abstract class PosixGuest implements GuestOs {
 	}
 
 	async readFileBytes(path: string, options: GuestRunOptions = {}): Promise<Uint8Array> {
-		const result = checkResult(
+		const result = checkWholeOutput(
 			this.vmid,
 			`read ${path}`,
 			await this.run(`base64 < ${shQuote(path)}`, options),
@@ -74,6 +80,7 @@ export abstract class PosixGuest implements GuestOs {
 		return new TextDecoder().decode(await this.readFileBytes(path, options))
 	}
 
+	/** Content above POSIX_WRITE_CHUNK_BYTES goes over in several commands, the later ones appending. */
 	async writeFile(
 		path: string,
 		content: string | Uint8Array,
@@ -81,8 +88,11 @@ export abstract class PosixGuest implements GuestOs {
 	): Promise<void> {
 		const bytes = typeof content === 'string' ? Buffer.from(content, 'utf8') : Buffer.from(content)
 		const prefix = options.sudo ? 'sudo -n ' : ''
-		const line = `printf %s ${shQuote(bytes.toString('base64'))} | base64 ${this.base64Decode} | ${prefix}tee ${shQuote(path)} > /dev/null`
-		checkResult(this.vmid, `write ${path}`, await this.run(line, options), options)
+		for (const [index, chunk] of chunks(bytes, POSIX_WRITE_CHUNK_BYTES).entries()) {
+			const tee = index === 0 ? 'tee' : 'tee -a'
+			const line = `printf %s ${shQuote(chunk.toString('base64'))} | base64 ${this.base64Decode} | ${prefix}${tee} ${shQuote(path)} > /dev/null`
+			checkResult(this.vmid, `write ${path}`, await this.run(line, options), options)
+		}
 		if (options.mode !== undefined) {
 			const chmod = `${prefix}chmod ${shQuote(options.mode)} ${shQuote(path)}`
 			checkResult(this.vmid, `chmod ${path}`, await this.run(chmod, options), options)
@@ -124,6 +134,16 @@ export abstract class PosixGuest implements GuestOs {
 	shutdown(options: GuestRunOptions = {}): Promise<GuestRunResult> {
 		return this.run('shutdown -h now 2>/dev/null || sudo -n shutdown -h now', options)
 	}
+}
+
+/** Split bytes into pieces of at most `size`; empty content is one empty piece. */
+export function chunks(bytes: Buffer, size: number): Buffer[] {
+	if (bytes.length === 0) return [bytes]
+	const pieces: Buffer[] = []
+	for (let offset = 0; offset < bytes.length; offset += size) {
+		pieces.push(bytes.subarray(offset, offset + size))
+	}
+	return pieces
 }
 
 /**

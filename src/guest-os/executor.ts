@@ -3,7 +3,7 @@
  * `pct exec` on the node for a container.
  */
 
-import { GuestCommandError, PveTimeoutError } from '../core/errors.ts'
+import { GuestCommandError, GuestOutputTruncatedError, PveTimeoutError } from '../core/errors.ts'
 import type { AgentExecOptions, QemuAgent } from '../guest/agent.ts'
 import { PveShellTimeoutError } from '../shell/errors.ts'
 import { assertSafeInteger, shJoin } from '../shell/escape.ts'
@@ -29,6 +29,7 @@ export function qemuAgentExecutor(agent: QemuAgent): GuestExecutor {
 				stdout: status.stdout,
 				stderr: status.stderr,
 				timedOut: status.timedOut,
+				truncated: status.stdoutTruncated || status.stderrTruncated,
 			}
 		},
 	}
@@ -53,10 +54,17 @@ export function pctExecutor(shell: NodeShell, vmid: number): GuestExecutor {
 					stdout: result.stdout,
 					stderr: result.stderr,
 					timedOut: false,
+					truncated: false,
 				}
 			} catch (error) {
 				if (error instanceof PveShellTimeoutError) {
-					return { exitCode: -1, stdout: error.partialOutput, stderr: '', timedOut: true }
+					return {
+						exitCode: -1,
+						stdout: error.partialOutput,
+						stderr: '',
+						timedOut: true,
+						truncated: false,
+					}
 				}
 				throw error
 			}
@@ -91,5 +99,17 @@ export function checkResult(
 			stderr: result.stderr,
 		})
 	}
+	return result
+}
+
+/** `checkResult`, plus GuestOutputTruncatedError when the output was cut short. */
+export function checkWholeOutput(
+	vmid: number,
+	what: string,
+	result: GuestRunResult,
+	options: GuestRunOptions = {},
+): GuestRunResult {
+	checkResult(vmid, what, result, options)
+	if (result.truncated) throw new GuestOutputTruncatedError({ vmid, what })
 	return result
 }

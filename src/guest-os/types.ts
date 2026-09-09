@@ -30,6 +30,8 @@ export interface GuestRunResult {
 	 * still be running inside the guest.
 	 */
 	timedOut: boolean
+	/** True when the transport cut stdout or stderr short. The guest agent stops at 16 MiB. */
+	truncated: boolean
 }
 
 /** Runs an argument vector inside one guest, with no shell in between. */

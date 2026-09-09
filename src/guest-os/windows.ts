@@ -10,7 +10,8 @@
  */
 
 import { isRecord } from '../core/values.ts'
-import { checkResult } from './executor.ts'
+import { checkResult, checkWholeOutput } from './executor.ts'
+import { chunks } from './posix.ts'
 import type {
 	GuestExecutor,
 	GuestOs,
@@ -20,6 +21,11 @@ import type {
 } from './types.ts'
 
 const POWERSHELL = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
+/**
+ * Bytes per write command. The script travels as `-EncodedCommand`, UTF-16
+ * in base64, and the whole command line has to stay under 32767 characters.
+ */
+export const WINDOWS_WRITE_CHUNK_BYTES = 8 * 1024
 const CMD = 'C:\\Windows\\System32\\cmd.exe'
 
 /** Escape a value for a single-quoted PowerShell string literal. */
@@ -101,17 +107,21 @@ export class WindowsGuest implements GuestOs {
 		return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
 	}
 
+	/** Content above WINDOWS_WRITE_CHUNK_BYTES goes over in several commands, the later ones appending. */
 	async writeFile(
 		path: string,
 		content: string | Uint8Array,
 		options: GuestRunOptions = {},
 	): Promise<void> {
 		const bytes = typeof content === 'string' ? Buffer.from(content, 'utf8') : Buffer.from(content)
-		await this.psOutput(
-			`[IO.File]::WriteAllBytes(${psString(path)}, [Convert]::FromBase64String('${bytes.toString('base64')}'))`,
-			`write ${path}`,
-			options,
-		)
+		for (const [index, chunk] of chunks(bytes, WINDOWS_WRITE_CHUNK_BYTES).entries()) {
+			const decoded = `[Convert]::FromBase64String('${chunk.toString('base64')}')`
+			const script =
+				index === 0
+					? `[IO.File]::WriteAllBytes(${psString(path)}, ${decoded})`
+					: `$b = ${decoded}; $f = [IO.File]::Open(${psString(path)}, [IO.FileMode]::Append); $f.Write($b, 0, $b.Length); $f.Dispose()`
+			await this.psOutput(script, `write ${path}`, options)
+		}
 	}
 
 	async delete(path: string, options: GuestRunOptions = {}): Promise<void> {
@@ -185,7 +195,7 @@ export class WindowsGuest implements GuestOs {
 
 	/** Run a script that stops at its first error and return its trimmed stdout. */
 	private async psOutput(script: string, what: string, options: GuestRunOptions): Promise<string> {
-		const result = checkResult(
+		const result = checkWholeOutput(
 			this.vmid,
 			what,
 			await this.powershell(`$ErrorActionPreference = 'Stop'; ${script}`, options),
