@@ -131,12 +131,12 @@ export interface SerialConsoleOptions {
 	socketFactory?: SocketFactory
 }
 
-export interface WaitOptions {
+export interface SerialWaitOptions {
 	/** Defaults to 30000. */
 	timeoutMs?: number
 }
 
-export interface PromptOptions extends WaitOptions {
+export interface PromptOptions extends SerialWaitOptions {
 	/** What the line the cursor is on has to match. Defaults to SHELL_PROMPT. */
 	pattern?: RegExp
 }
@@ -337,7 +337,7 @@ export class SerialConsole extends EventEmitter<SerialConsoleEvents> {
 	 * Resolves with the screen once `pattern` matches it. Throws
 	 * PveTimeoutError carrying the last screen when the deadline passes.
 	 */
-	waitForText(pattern: string | RegExp, options: WaitOptions = {}): Promise<string> {
+	waitForText(pattern: string | RegExp, options: SerialWaitOptions = {}): Promise<string> {
 		return this.waitFor(
 			`${describe(pattern)} on the serial console of guest ${this.vmid}`,
 			() => {
