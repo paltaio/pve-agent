@@ -238,13 +238,16 @@ guest's websocket goes away underneath it. A container's `delete` also takes
 endpoint experimental.
 
 A task that fails with `can't lock file ... got timeout` did nothing: the
-node takes the guest's config lock before it changes anything. The power calls
-and `delete` on a handle post the task again for up to 45 seconds while it
-fails that way. The usual cause is `qm cleanup`, which qmeventd runs when a
-QEMU process exits and which holds the lock for up to 30 seconds when a
-process with the same vmid is running again, as happens when a VM is deleted
-and its vmid recreated straight away. `api.stop()` and the other module calls
-return the UPID and leave the retry to the caller.
+node takes the guest's config lock before it changes anything. The power calls,
+the snapshot calls and `delete` on a handle post the task again for up to 45
+seconds while it fails that way. One cause is `qm cleanup`, which qmeventd
+runs when a QEMU process exits and which holds the lock for up to 30 seconds
+when a process with the same vmid is running again, as happens when a VM is
+deleted and its vmid recreated straight away. Another is a rollback to a
+snapshot with RAM state: the rollback task ends while QEMU is still loading
+the state under the lock, and a snapshot call right after waits on it.
+`api.stop()` and the other module calls return the UPID and leave the retry
+to the caller.
 
 A start or stop task can finish before the guest has settled, so wait on the
 guest itself:
@@ -316,6 +319,13 @@ await ct.migrate({ target: 'pve2', restart: true })
 const pre = await vm.api.migratePreconditions('pve2')
 console.log(pre.allowedNodes, pre.notAllowedNodes, pre.localDisks, pre.localResources)
 ```
+
+A migration copies local disks on its own when the target has a storage of
+the same name; `with-local-disks: true` is what an online migration needs
+for them. Every bridge the guest's NICs name has to exist on the target.
+`migratePreconditions` reports missing storages and not missing bridges, so
+that case surfaces as a task that fails in phase 2 with "bridge 'vmbr1' does
+not exist" in its log.
 
 Without `full`, a template is copied as a linked clone; a normal VM is always
 copied in full. A running container needs `restart: true`, which stops it,

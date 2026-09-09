@@ -57,7 +57,10 @@ console.log(status.upid, status.node, status.type, status.id, status.user, statu
 
 Polling starts at 200 ms and doubles to 2 s. On failure it throws
 `PveTaskError` carrying the exit status and the last 25 lines of the task
-log, so the message says why the task failed.
+log, so the message says why the task failed. The first line of the message
+also carries the first `ERROR:` line of the log when it says more than the
+exit status: a migration ends with "migration problems" while the line that
+names the cause sits higher up.
 
 `WARNINGS: n` is a success status. PVE treats it that way and so does
 `waitForTask`; `failOnWarnings: true` turns it into a failure.
@@ -384,9 +387,10 @@ would decide. See [shell.md](shell.md).
   on a ticket call triggers a fresh login and a single retry; a 403 is final.
 - A call whose tier decision says `ticket` while only a token is configured
   throws before sending anything.
-- The power calls and `delete` on a guest handle post their task again for up
-  to 45 seconds while it fails on the guest's config lock, since the node
-  takes that lock before it changes anything. See [guests.md](guests.md).
+- The power calls, the snapshot calls and `delete` on a guest handle post
+  their task again for up to 45 seconds while it fails on the guest's config
+  lock, since the node takes that lock before it changes anything. See
+  [guests.md](guests.md).
 
 Everything else is yours: a task that failed for any other reason ran once,
 and a command that exited non-zero ran once.

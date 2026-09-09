@@ -434,7 +434,9 @@ container makes `pct` exit 255 with "container is not running" on stderr.
 `pct unlock` is the only way to clear a container's config lock: the config
 endpoint has no `skiplock` and checks the lock on every write. Clearing a
 lock while the operation that set it is still running lets two writers touch
-the same config, so check what is in flight first.
+the same config, so check what is in flight first. On a config with no lock
+`pct` exits 255 with "no lock found"; `unlock` returns that result instead of
+throwing, since the lock is gone either way.
 
 ## Errors
 

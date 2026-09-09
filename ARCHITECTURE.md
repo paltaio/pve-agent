@@ -241,9 +241,10 @@ transport is open, so it is awaited: `await node.shell`, `await ct.shell`,
 `await vm.os`, `await ct.os`. A failed `os` open is retried on the next await.
 
 `guest.api` is the module handle underneath a guest (`QemuApi` or `LxcApi`),
-and its lifecycle calls return the raw UPID. The handle's power calls and
-`delete` wait for the task and post it again for up to 45 s while it fails on
-the guest's config lock, which the node takes before it changes anything.
+and its lifecycle calls return the raw UPID. The handle's power calls,
+snapshot calls and `delete` wait for the task and post it again for up to 45 s
+while it fails on the guest's config lock, which the node takes before it
+changes anything.
 `delete` closes the guest's console sessions first, since a destroyed guest's
 sockets go away underneath them.
 

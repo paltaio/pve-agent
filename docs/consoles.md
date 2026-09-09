@@ -265,7 +265,10 @@ pass; after a `sendLine` the prompt has to be one rendered after the line went
 out, since the cursor line still ends in the old prompt until the echo comes
 back. A guest that redraws the screen from the top, as `clear` does, resets
 both to the whole screen. Both waits throw `PveTimeoutError` with the last
-screen in the message when the timeout, 30 seconds by default, passes.
+screen in the message when the timeout, 30 seconds by default, passes. When
+that screen holds nothing but the proxy's own banner, the guest never wrote
+to the port, and the message says so and names what a VM needs instead of
+showing the screen.
 `login` waits for the login and password prompts in turn, sends Enter first
 when the cursor is not on a login prompt, and throws `PveConsoleError` when
 the guest refuses the credentials.

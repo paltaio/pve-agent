@@ -87,11 +87,18 @@ cluster.client // PveClient: any endpoint by path
 `createVm` and `createContainer` wait for the create task and return the
 handle. Disks are config keys: `scsi0: 'local-zfs:16'` allocates 16 GiB.
 
+A migration copies local disks on its own when the target has a storage of
+the same name; `with-local-disks` is what an online migration needs for
+them. Every bridge the guest's NICs name has to exist on the target, and
+`migratePreconditions` does not check that: the task fails in phase 2 with
+"bridge 'vmbr1' does not exist" in its log, and the error message carries
+that line.
+
 ### VM handle
 
 Every lifecycle call waits for the worker task and returns its final status.
-The power calls and `delete` post the task again for up to 45 seconds while
-it fails on the guest's config lock.
+The power calls, the snapshot calls and `delete` post the task again for up
+to 45 seconds while it fails on the guest's config lock.
 
 ```ts
 const vm = cluster.vm(100)
@@ -110,7 +117,8 @@ await vm.snapshots()
 await vm.rollback('before-upgrade')
 await vm.deleteSnapshot('before-upgrade')
 await vm.clone({ newid: 101, full: true })
-await vm.migrate({ target: 'pve2', online: true })
+await vm.api.migratePreconditions('pve2') // { allowedNodes, notAllowedNodes, localDisks }
+await vm.migrate({ target: 'pve2', online: true, 'with-local-disks': true })
 await vm.setNotes('owner: platform') // the config description; notes() reads it
 await vm.delete({ purge: true }) // stopped VM only; purge also drops backup, replication and HA entries
 
@@ -182,8 +190,9 @@ await os.exists('/var/run/reboot-required') // also hostname, delete, download, 
 await os.osInfo() // { os, id, name, version, prettyName, kernel, arch, raw }
 ```
 
-Linux adds `systemctl(args)`, the POSIX helpers add `sudo(command)`, Windows
-adds `cmd(line)` and `powershell(script)`, macOS adds `osascript(script)`.
+Linux adds `systemctl(['restart', 'sshd'])`, which takes an argument vector,
+the POSIX helpers add `sudo(command)`, Windows adds `cmd(line)` and
+`powershell(script)`, macOS adds `osascript(script)`.
 
 `exec` and `run` return `exitCode` (128 plus the signal number for a process a
 signal killed) and `timedOut: true` when the deadline passes with the process
@@ -266,7 +275,10 @@ await vm.console.readNew() // text rendered since the previous call; screen() is
 
 `waitForText` and `waitForPrompt` look at the output rendered since the last
 `sendLine`, or the whole screen before any, and throw `PveTimeoutError`
-carrying the last screen. `login` throws `PveConsoleError` when the guest
+carrying the last screen. When that screen holds nothing but the proxy's own
+banner, the guest never wrote to the port, and the message says what to
+enable. A clone of a VM whose getty was started by hand rather than enabled
+comes up without one. `login` throws `PveConsoleError` when the guest
 refuses the credentials.
 
 ## The node shell
@@ -307,8 +319,12 @@ await shell.pct.push(110, '/tmp/file', '/root/file', { perms: '0600' }) // pull,
 ```
 
 The shell refuses commands that match its destructive patterns (`rm -rf`,
-`zfs destroy`, `zpool destroy`, `wipefs`, `mkfs`, `dd of=`, `qm destroy`,
-`apt remove`, `reboot`, `poweroff`) with `PveShellPolicyError`. It sees
+`find -delete`, `shred`, `zfs destroy`, `zfs rollback`, `zfs change-key`,
+`zpool destroy` and the other zpool state changes, `wipefs`, `mkfs`,
+partitioning tools, `dd of=`, LVM and mdadm removal, `qm destroy`,
+`pct destroy`, `pvecm delnode`, `apt remove`, `apt purge`, `reboot`,
+`poweroff`) with `PveShellPolicyError`. `shell.zfs.rollback` and
+`shell.zfs.destroyDataset` are behind the same policy. It sees
 through `sudo`, `env`, `timeout` and the other wrappers, ignores quoting and
 flag order, and reads the body of `sh -c '...'`, and `input` handed to an
 interpreter, as command lines. Allow them for a script with
@@ -320,7 +336,9 @@ A lifecycle call on a handle waits for its worker task. The `api` object
 underneath returns the UPID; `cluster.waitForTask(upid, options)` waits for
 it, 10 minutes by default. `WARNINGS: n` counts as success unless
 `failOnWarnings: true`. A task that failed ran once; only the config-lock
-retry above posts a task again.
+retry above posts a task again. A `PveTaskError` message carries the exit
+status, the first `ERROR:` line of the task log when it says more than the
+exit status, and the last 25 log lines.
 
 Every error extends `PveError` and carries `kind`:
 
@@ -352,7 +370,11 @@ Every error extends `PveError` and carries `kind`:
 
 An API token reaches every endpoint except the twelve below. Their handlers
 compare the caller against the string `root@pam`, and a root-owned token is
-`root@pam!name`, so the call needs `PVE_USER=root@pam` and `PVE_PASSWORD`:
+`root@pam!name`, so the call needs `PVE_USER=root@pam` and `PVE_PASSWORD`. A
+password user in another realm gives a ticket the client uses for the VNC
+and terminal proxies, and nothing below; the `PveTierError` names the
+configured ticket user. Check `PVE_USER` before planning work that needs
+these:
 
 ```
 POST   /cluster/config                    POST   /cluster/config/join
