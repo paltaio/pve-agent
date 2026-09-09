@@ -50,11 +50,11 @@ describe('NodeReplicationApi', () => {
 		expect(mock.last().path).toBe('/nodes/ms01-0160/replication/110-0/status')
 
 		mock.reply({ data: [{ n: 1, t: 'start replication job' }] })
-		expect(await replication.log('110-0', { limit: 10 })).toHaveLength(1)
+		expect((await replication.log('110-0', { limit: 10 })).lines).toHaveLength(1)
 		expect(mock.last().path).toBe('/nodes/ms01-0160/replication/110-0/log?limit=10')
 
 		mock.reply({ data: [], attribs: { total: 3 } })
-		expect(await replication.logPage('110-0')).toEqual({ lines: [], total: 3 })
+		expect(await replication.log('110-0')).toEqual({ lines: [], total: 3 })
 
 		mock.reply({ data: 'UPID:ms01-0160:00000001:00000001:00000001:pvesr:110-0:root@pam:' })
 		expect(await replication.runNow('110-0')).toStartWith('UPID:')

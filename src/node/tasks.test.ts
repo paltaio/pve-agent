@@ -25,25 +25,25 @@ describe('NodeTasksApi', () => {
 				},
 			],
 		})
-		const [task] = await new NodeTasksApi(mock.client, 'ms01-0160').list({
+		const { tasks } = await new NodeTasksApi(mock.client, 'ms01-0160').list({
 			source: 'all',
 			typefilter: 'vzdump',
 			errors: false,
 		})
 		expect(mock.last().path).toBe('/nodes/ms01-0160/tasks?source=all&typefilter=vzdump&errors=0')
-		expect(task).toMatchObject({ status: 'stopped', exitStatus: 'OK', outcome: 'ok' })
+		expect(tasks[0]).toMatchObject({ status: 'stopped', exitStatus: 'OK', outcome: 'ok' })
 	})
 
-	test('page returns the total the node reports beside data', async () => {
+	test('list returns the total the node reports beside data', async () => {
 		const mock = mockClient()
 		mock.reply({ data: [{ upid: REMOTE_UPID }], attribs: { total: 61 } })
-		const page = await new NodeTasksApi(mock.client, 'ms01-0160').page({ limit: 1 })
+		const page = await new NodeTasksApi(mock.client, 'ms01-0160').list({ limit: 1 })
 		expect(mock.last().path).toBe('/nodes/ms01-0160/tasks?limit=1')
 		expect(page.total).toBe(61)
 		expect(page.tasks).toHaveLength(1)
 
 		mock.reply({ data: [] })
-		expect((await new NodeTasksApi(mock.client, 'ms01-0160').page()).total).toBeUndefined()
+		expect((await new NodeTasksApi(mock.client, 'ms01-0160').list()).total).toBeUndefined()
 	})
 
 	// The UPID names its own node, so a UPID handed out by another node's list

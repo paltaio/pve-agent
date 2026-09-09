@@ -39,7 +39,7 @@ describe('a node handle', () => {
 				},
 			],
 		})
-		const tasks = await cluster.node('ms01-0160').tasks({ limit: 5 })
+		const { tasks } = await cluster.node('ms01-0160').tasks({ limit: 5 })
 		expect(tasks.map((task) => task.type)).toEqual(['qmstart'])
 		expect(last().path).toBe('/nodes/ms01-0160/tasks?limit=5')
 	})

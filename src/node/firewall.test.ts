@@ -49,16 +49,19 @@ describe('NodeFirewallApi', () => {
 		expect(formObject(mock.last())).toEqual({ enable: '0' })
 	})
 
-	test('log and logPage read the lines, and logPage adds the total', async () => {
+	test('log reads the lines and the total the node reports beside them', async () => {
 		const mock = mockClient()
 		const firewall = new NodeFirewallApi(mock.client, 'ms01-0160')
 
 		mock.reply({ data: [{ n: 1, t: 'drop' }] })
-		expect(await firewall.log({ limit: 200 })).toEqual([{ n: 1, t: 'drop' }])
+		expect(await firewall.log({ limit: 200 })).toEqual({
+			lines: [{ n: 1, t: 'drop' }],
+			total: undefined,
+		})
 		expect(mock.last().path).toBe('/nodes/ms01-0160/firewall/log?limit=200')
 
 		mock.reply({ data: [{ n: 1, t: 'drop' }], attribs: { total: '12' } })
-		expect(await firewall.logPage({ since: 5 })).toEqual({
+		expect(await firewall.log({ since: 5 })).toEqual({
 			lines: [{ n: 1, t: 'drop' }],
 			total: 12,
 		})

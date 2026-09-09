@@ -27,14 +27,3 @@ export async function getEnvelope<T>(
 ): Promise<EnvelopeResult<T>> {
 	return client.request<T>('GET', path, params, { withAttribs: true })
 }
-
-/** The `total` attribute as a number, when the handler set one. */
-export function envelopeTotal(attribs: Readonly<Record<string, unknown>>): number | undefined {
-	const total = attribs['total']
-	if (typeof total === 'number') return Number.isFinite(total) ? total : undefined
-	if (typeof total === 'string' && total !== '') {
-		const parsed = Number(total)
-		return Number.isFinite(parsed) ? parsed : undefined
-	}
-	return undefined
-}

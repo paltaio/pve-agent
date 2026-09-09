@@ -2,9 +2,8 @@
  * One node: the API surface bound to it, and the root shell on it.
  */
 
-import type { TaskListEntry } from '../core/tasks.ts'
 import { NodeApi, type NodeStatus } from '../node/node.ts'
-import type { NodeTaskListOptions } from '../node/tasks.ts'
+import type { NodeTaskListOptions, NodeTaskPage } from '../node/tasks.ts'
 import type { NodeShell } from '../shell/node-shell.ts'
 import type { PveContext } from './context.ts'
 
@@ -42,8 +41,8 @@ export class PveNode {
 		return this.api.status()
 	}
 
-	/** Worker tasks on this node, newest first. */
-	tasks(options?: NodeTaskListOptions): Promise<TaskListEntry[]> {
+	/** One page of worker tasks on this node, newest first, with the total count. */
+	tasks(options?: NodeTaskListOptions): Promise<NodeTaskPage> {
 		return this.api.tasks.list(options)
 	}
 }

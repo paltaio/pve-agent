@@ -17,7 +17,8 @@ import {
 	type TaskStatus,
 } from '../core/tasks.ts'
 import type { NodesTasksGetByNodeParams } from '../generated/types.ts'
-import { envelopeTotal, getEnvelope } from '../cluster/envelope.ts'
+import { getEnvelope } from '../cluster/envelope.ts'
+import { toOptionalNumber } from '../core/values.ts'
 
 export type NodeTaskListOptions = NodesTasksGetByNodeParams
 
@@ -37,25 +38,17 @@ export class NodeTasksApi {
 	}
 
 	/**
-	 * One page of the task list, newest first. Defaults to the 50 most recent
-	 * finished tasks; `source: 'all'` includes running ones.
+	 * One page of the task list, newest first, with the total row count the
+	 * node reports beside `data`. Defaults to the 50 most recent finished
+	 * tasks; `source: 'all'` includes running ones.
 	 */
-	async list(options?: NodeTaskListOptions): Promise<TaskListEntry[]> {
-		const rows = await this.client.get<Record<string, unknown>[]>(this.base, options)
-		return rows.map(normalizeTaskListEntry)
-	}
-
-	/**
-	 * The same page plus the total row count, which the node reports beside
-	 * `data` in the envelope.
-	 */
-	async page(options?: NodeTaskListOptions): Promise<NodeTaskPage> {
+	async list(options?: NodeTaskListOptions): Promise<NodeTaskPage> {
 		const { data, attribs } = await getEnvelope<Record<string, unknown>[]>(
 			this.client,
 			this.base,
 			options,
 		)
-		return { tasks: data.map(normalizeTaskListEntry), total: envelopeTotal(attribs) }
+		return { tasks: data.map(normalizeTaskListEntry), total: toOptionalNumber(attribs['total']) }
 	}
 
 	async status(upid: string): Promise<TaskStatus> {

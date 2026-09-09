@@ -8,7 +8,8 @@
 
 import type { PveClient } from '../core/client.ts'
 import type { PveLogLine } from '../core/tasks.ts'
-import { envelopeTotal, getEnvelope } from '../cluster/envelope.ts'
+import { getEnvelope } from '../cluster/envelope.ts'
+import { toOptionalNumber } from '../core/values.ts'
 import { FirewallRulesApi } from '../cluster/firewall.ts'
 import type {
 	NodesFirewallLogGetParams,
@@ -51,20 +52,16 @@ export class NodeFirewallApi {
 	}
 
 	/**
-	 * Firewall log lines, newest last. Only rules with `log` set to a level
-	 * other than `nolog` appear.
+	 * Firewall log lines, newest last, with the total count the node reports
+	 * beside `data` for paging. Only rules with `log` set to a level other
+	 * than `nolog` appear.
 	 */
-	async log(options?: NodesFirewallLogGetParams): Promise<PveLogLine[]> {
-		return this.client.get<PveLogLine[]>(`${this.base}/log`, options)
-	}
-
-	/** The same lines plus the total count the node reports beside `data`. */
-	async logPage(options?: NodesFirewallLogGetParams): Promise<FirewallLogPage> {
+	async log(options?: NodesFirewallLogGetParams): Promise<FirewallLogPage> {
 		const { data, attribs } = await getEnvelope<PveLogLine[]>(
 			this.client,
 			`${this.base}/log`,
 			options,
 		)
-		return { lines: data, total: envelopeTotal(attribs) }
+		return { lines: data, total: toOptionalNumber(attribs['total']) }
 	}
 }

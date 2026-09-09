@@ -8,7 +8,7 @@
 import type { PveClient } from '../core/client.ts'
 import type { PveLogLine } from '../core/tasks.ts'
 import { toOptionalBoolean, toOptionalNumber, toOptionalString } from '../core/values.ts'
-import { envelopeTotal, getEnvelope } from '../cluster/envelope.ts'
+import { getEnvelope } from '../cluster/envelope.ts'
 import type {
 	NodesReplicationGetByNodeParams,
 	NodesReplicationLogGetParams,
@@ -94,19 +94,17 @@ export class NodeReplicationApi {
 		)
 	}
 
-	/** Log of the last run of one job, oldest line first. */
-	async log(id: string, options?: NodesReplicationLogGetParams): Promise<PveLogLine[]> {
-		return this.client.get<PveLogLine[]>(this.jobPath(id, '/log'), options)
-	}
-
-	/** The same lines plus the total count the node reports beside `data`. */
-	async logPage(id: string, options?: NodesReplicationLogGetParams): Promise<ReplicationLogPage> {
+	/**
+	 * Log of the last run of one job, oldest line first, with the total count
+	 * the node reports beside `data` for paging.
+	 */
+	async log(id: string, options?: NodesReplicationLogGetParams): Promise<ReplicationLogPage> {
 		const { data, attribs } = await getEnvelope<PveLogLine[]>(
 			this.client,
 			this.jobPath(id, '/log'),
 			options,
 		)
-		return { lines: data, total: envelopeTotal(attribs) }
+		return { lines: data, total: toOptionalNumber(attribs['total']) }
 	}
 
 	/** Run a job now instead of waiting for its schedule. Returns a UPID. */
