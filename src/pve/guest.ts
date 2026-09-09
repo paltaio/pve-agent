@@ -99,6 +99,11 @@ abstract class PveGuestBase {
 		return this.api.path
 	}
 
+	/** What console.log prints: the handle's identity, not the cluster it hangs off. */
+	[Symbol.for('nodejs.util.inspect.custom')](): string {
+		return `${this.constructor.name} { node: '${this.node}', vmid: ${this.vmid} }`
+	}
+
 	/** Firewall rules, aliases, IP sets and options for this guest. */
 	get firewall(): GuestFirewallApi {
 		return this.api.firewall

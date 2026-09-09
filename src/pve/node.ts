@@ -31,6 +31,11 @@ export class PveNode {
 		return this.context.nodeShell(this.name)
 	}
 
+	/** What console.log prints: the handle's identity, not the cluster it hangs off. */
+	[Symbol.for('nodejs.util.inspect.custom')](): string {
+		return `PveNode { name: '${this.name}' }`
+	}
+
 	/** Closes the shell on this node, if one is open. The next `shell` opens a new one. */
 	closeShell(): Promise<void> {
 		return this.context.closeNodeShell(this.name)

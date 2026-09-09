@@ -138,6 +138,11 @@ export class PveCluster implements PveContext {
 		this.socketFactory = options.socketFactory
 	}
 
+	/** What console.log prints: where the client points, not every session it holds. */
+	[Symbol.for('nodejs.util.inspect.custom')](): string {
+		return `PveCluster { url: '${this.client.baseUrl}' }`
+	}
+
 	/** Manager version, release and repository id of the node the client talks to. */
 	version(): Promise<PveVersion> {
 		return this.client.get<PveVersion>('/version')
