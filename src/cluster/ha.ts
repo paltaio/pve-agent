@@ -13,7 +13,6 @@
  */
 
 import type { PveClient } from '../core/client.ts'
-import { PveError } from '../core/errors.ts'
 import {
 	isRecord,
 	parseTagList,
@@ -95,9 +94,15 @@ export interface HaResourceAffinityRule extends HaRuleBase {
 	affinity: 'positive' | 'negative'
 }
 
-export type HaRule = HaNodeAffinityRule | HaResourceAffinityRule
+/** A rule of a type this module does not model; its fields are in `raw`. */
+export interface HaOtherRule extends HaRuleBase {
+	type: 'other'
+	/** The type as the manager reports it. */
+	ruleType: string
+}
 
-/** Throws PveError when the rule type is one this module does not model. */
+export type HaRule = HaNodeAffinityRule | HaResourceAffinityRule | HaOtherRule
+
 export function normalizeHaRule(raw: Record<string, unknown>): HaRule {
 	const base: HaRuleBase = {
 		rule: String(raw['rule'] ?? ''),
@@ -124,7 +129,7 @@ export function normalizeHaRule(raw: Record<string, unknown>): HaRule {
 			affinity: raw['affinity'] === 'negative' ? 'negative' : 'positive',
 		}
 	}
-	throw new PveError('api', `HA rule '${base.rule}' has unknown type '${String(type)}'`)
+	return { ...base, type: 'other', ruleType: String(type ?? '') }
 }
 
 /** One row of the HA manager view: a quorum line, a node, or a service. */

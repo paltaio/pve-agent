@@ -218,6 +218,7 @@ export { ClusterHaApi, normalizeHaRule } from './cluster/ha.ts'
 export type {
 	HaGroup,
 	HaNodeAffinityRule,
+	HaOtherRule,
 	HaResource,
 	HaResourceAffinityRule,
 	HaRule,

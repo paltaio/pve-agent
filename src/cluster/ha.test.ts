@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { PveError } from '../core/errors.ts'
 import { closeMockClients, formObject, mockClient } from '../core/test-support/api-mock.ts'
 import { ClusterHaApi, normalizeHaRule } from './ha.ts'
 
@@ -74,8 +73,11 @@ describe('rules', () => {
 		expect(apart.errors).toEqual({ resources: 'vm:100 is not managed' })
 	})
 
-	test('an unknown rule type is refused rather than misread', () => {
-		expect(() => normalizeHaRule({ rule: 'x', type: 'time-affinity' })).toThrow(PveError)
+	test('an unknown rule type keeps the base fields and names the type', () => {
+		const rule = normalizeHaRule({ rule: 'x', type: 'time-affinity', resources: 'vm:100' })
+		expect(rule.type).toBe('other')
+		if (rule.type === 'other') expect(rule.ruleType).toBe('time-affinity')
+		expect(rule.resources).toEqual(['vm:100'])
 	})
 
 	test('list filters, and each branch sends its own discriminator', async () => {
