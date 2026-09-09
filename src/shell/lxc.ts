@@ -12,6 +12,7 @@
  */
 
 import { parseSize } from '../core/props.ts'
+import { PveShellCommandError } from './errors.ts'
 import { assertSafeInteger, shJoin, shQuote } from './escape.ts'
 import type { NodeShell } from './node-shell.ts'
 import { parseGuestConfig } from './qemu.ts'
@@ -223,8 +224,13 @@ export class PctShell {
 	 * Clear a stale config lock. Clearing a lock while the operation that set
 	 * it is still running lets two writers touch the same config.
 	 */
-	unlock(vmid: number): Promise<CommandResult> {
-		return this.run(['pct', 'unlock', vmidArg(vmid)])
+	async unlock(vmid: number): Promise<CommandResult> {
+		const command = shJoin(['pct', 'unlock', vmidArg(vmid)])
+		const result = await this.shell.run(command)
+		// pct exits 255 with 'no lock found' on a config that has none, which
+		// is the state the caller asked for.
+		if (result.exitCode === 0 || /no lock found/.test(result.stderr)) return result
+		throw new PveShellCommandError({ node: this.shell.node, command, ...result })
 	}
 
 	/** Add volumes no config references back as unused mount points, and refresh disk sizes. */

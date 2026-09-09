@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { PveShellPolicyError } from './errors.ts'
+import { PveShellCommandError, PveShellPolicyError } from './errors.ts'
 import { parsePctDf, parsePctList } from './lxc.ts'
 import { NodeShell } from './node-shell.ts'
 import { FakeTransport } from './test-support.ts'
@@ -145,7 +145,31 @@ describe('lifecycle and maintenance', () => {
 			'pct fsck 9060 --force 1 --device rootfs',
 			'pct fstrim 9060 --ignore-mountpoints 1',
 		])
-		expect(transport.calls.every((call) => call.options.check === true)).toBe(true)
+		expect(
+			transport.calls
+				.filter((call) => call.command !== 'pct unlock 9060')
+				.every((call) => call.options.check === true),
+		).toBe(true)
+	})
+
+	test('unlock on a config with no lock counts as done', async () => {
+		const transport = new FakeTransport({
+			reply: () => ({ exitCode: 255, stderr: 'no lock found trying to remove any lock\n' }),
+		})
+		const result = await new NodeShell(transport).pct.unlock(9060)
+		expect(result.exitCode).toBe(255)
+	})
+
+	test('any other unlock failure is a command error', async () => {
+		const transport = new FakeTransport({
+			reply: () => ({
+				exitCode: 2,
+				stderr: "Configuration file 'nodes/x/lxc/9060.conf' does not exist\n",
+			}),
+		})
+		await expect(new NodeShell(transport).pct.unlock(9060)).rejects.toBeInstanceOf(
+			PveShellCommandError,
+		)
 	})
 })
 
