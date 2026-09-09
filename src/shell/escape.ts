@@ -15,6 +15,12 @@ import { PveShellPolicyError } from './errors.ts'
  * needs a `--` in front of it.
  */
 export function shQuote(value: string): string {
+	if (typeof value !== 'string') {
+		refuse(
+			String(value),
+			`shQuote takes a string, and a ${typeof value} would reach the shell unquoted`,
+		)
+	}
 	if (value.includes('\0')) {
 		refuse(
 			value,

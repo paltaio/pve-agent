@@ -45,6 +45,12 @@ describe('shQuote', () => {
 		expect(shQuote('--not a flag')).toBe("'--not a flag'")
 	})
 
+	test('refuses a value that is not a string, which TypeScript cannot stop a JavaScript caller passing', () => {
+		for (const value of [42, undefined, null, ['a'], { toString: () => 'x' }]) {
+			expect(() => Reflect.apply(shQuote, undefined, [value])).toThrow(PveShellPolicyError)
+		}
+	})
+
 	test('refuses a NUL byte, which execve truncates the value at', () => {
 		expect(() => shQuote('/etc/passwd\0/tmp/decoy')).toThrow(PveShellPolicyError)
 	})
