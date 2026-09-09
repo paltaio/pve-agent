@@ -122,9 +122,8 @@ otherwise, and the proxy call and the WebSocket present the same credential.
 The console layer puts `ticket.ticket` in the `PVEAuthCookie` cookie,
 URL-encoded, because the server runs the cookie value through `uri_unescape`.
 The node shell prefers SSH and falls back to the termproxy websocket only for
-a `root@pam` ticket, since `POST /nodes/{node}/termproxy` hands anyone else a
-`/bin/login` prompt. Anything with no endpoint at all belongs to the shell
-layer.
+a `root@pam` ticket; `docs/shell.md` says why. Anything with no endpoint at
+all belongs to the shell layer.
 
 ## Wire values
 
