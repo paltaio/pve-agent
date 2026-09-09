@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs the pve-agent skill into ~/.claude/skills, ~/.codex/skills and ~/.opencode/skills.
+# Installs the pve-agent skill for the agent CLIs found on this machine.
 #
 # Usage, with the credentials in a pve.env file:
 #   set -a; . ./pve.env; set +a
@@ -8,6 +8,9 @@
 # Run from a checkout it installs that checkout; run from anywhere else it
 # clones the repository. Missing credentials are asked for on the terminal;
 # without one, PVE_HOST and a credential pair are required in the environment.
+# A CLI counts as installed when its binary is on PATH or its config directory
+# exists. PVE_SKILL_TARGETS=claude,codex,/some/skills picks the targets by name
+# or skills directory; PVE_SKILL_LIST=1 prints the targets and exits.
 set -euo pipefail
 
 repo_url="https://github.com/paltaio/pve-agent.git"
@@ -17,6 +20,92 @@ work_dir=""
 staging=""
 previous=""
 target=""
+
+skill_roots=(
+	"claude|claude|$HOME/.claude|$HOME/.claude/skills"
+	"codex|codex|$HOME/.codex|$HOME/.agents/skills"
+	"opencode|opencode|$HOME/.config/opencode|$HOME/.agents/skills"
+	"gemini|gemini|$HOME/.gemini|$HOME/.agents/skills"
+	"cursor|agent|$HOME/.cursor|$HOME/.agents/skills"
+	"copilot|copilot|$HOME/.copilot|$HOME/.agents/skills"
+	"amp|amp|$HOME/.config/amp|$HOME/.agents/skills"
+	"goose|goose|$HOME/.config/goose|$HOME/.agents/skills"
+	"droid|droid|$HOME/.factory|$HOME/.agents/skills"
+)
+
+roots=()
+root_names=()
+add_root() {
+	local root="$1" name="$2" i
+	for i in "${!roots[@]}"; do
+		if [[ "${roots[$i]}" == "$root" ]]; then
+			root_names[i]="${root_names[$i]}, $name"
+			return
+		fi
+	done
+	roots+=("$root")
+	root_names+=("$name")
+}
+
+root_for_name() {
+	local row name binary config root
+	for row in "${skill_roots[@]}"; do
+		IFS='|' read -r name binary config root <<<"$row"
+		if [[ "$name" == "$1" ]]; then
+			printf '%s' "$root"
+			return 0
+		fi
+	done
+	return 1
+}
+
+if [[ -n "${PVE_SKILL_TARGETS:-}" ]]; then
+	IFS=',' read -r -a wanted <<<"$PVE_SKILL_TARGETS"
+	for item in "${wanted[@]}"; do
+		item="${item#"${item%%[! ]*}"}"
+		item="${item%"${item##*[! ]}"}"
+		if [[ -z "$item" ]]; then
+			continue
+		fi
+		if [[ "$item" == */* ]]; then
+			add_root "${item/#\~/$HOME}" "path"
+		elif root="$(root_for_name "$item")"; then
+			add_root "$root" "$item"
+		else
+			echo "unknown target $item; names: claude codex opencode gemini cursor copilot amp goose droid" >&2
+			exit 1
+		fi
+	done
+else
+	for row in "${skill_roots[@]}"; do
+		IFS='|' read -r name binary config root <<<"$row"
+		if command -v "$binary" >/dev/null 2>&1 || [[ -d "$config" ]]; then
+			add_root "$root" "$name"
+		fi
+	done
+fi
+
+if [[ ${#roots[@]} -eq 0 ]]; then
+	echo "no agent CLI found; supported targets, detected by binary on PATH or config directory:" >&2
+	for row in "${skill_roots[@]}"; do
+		IFS='|' read -r name binary config root <<<"$row"
+		echo "  $name: $binary, ${config/#"$HOME"/\~} -> ${root/#"$HOME"/\~}" >&2
+	done
+	echo "PVE_SKILL_TARGETS=name,name or a skills directory picks targets by hand" >&2
+	exit 1
+fi
+
+targets=()
+for root in "${roots[@]}"; do
+	targets+=("$root/$skill_name")
+done
+
+if [[ "${PVE_SKILL_LIST:-0}" == "1" ]]; then
+	for i in "${!targets[@]}"; do
+		echo "${targets[$i]} (${root_names[$i]})"
+	done
+	exit 0
+fi
 
 for tool in bun git; do
 	if ! command -v "$tool" >/dev/null 2>&1; then
@@ -37,17 +126,6 @@ cleanup() {
 	fi
 }
 trap cleanup EXIT
-
-targets=()
-for root in "$HOME/.claude/skills" "$HOME/.codex/skills" "$HOME/.opencode/skills"; do
-	if [[ -d "$root" ]]; then
-		targets+=("$root/$skill_name")
-	fi
-done
-if [[ ${#targets[@]} -eq 0 ]]; then
-	echo "no skills directory found: create ~/.claude/skills, ~/.codex/skills or ~/.opencode/skills" >&2
-	exit 1
-fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 if [[ -n "${PVE_SKILL_SOURCE_DIR:-}" ]]; then
@@ -147,7 +225,7 @@ first_modules=""
 for target in "${targets[@]}"; do
 	staging="$target.tmp.$$"
 	rm -rf "$staging"
-	mkdir -p "$staging"
+	mkdir -p "${target%/*}" "$staging"
 	cp "$repo_dir/package.json" "$repo_dir/bun.lock" "$repo_dir/LICENSE" "$repo_dir/README.md" "$staging/"
 	cp -R "$repo_dir/src" "$staging/src"
 	cp -R "$repo_dir/schema" "$staging/schema"
@@ -183,6 +261,6 @@ done
 target=""
 
 echo "pve-agent skill installed in:"
-for target in "${targets[@]}"; do
-	echo "  $target"
+for i in "${!targets[@]}"; do
+	echo "  ${targets[$i]} (${root_names[$i]})"
 done

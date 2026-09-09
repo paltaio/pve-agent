@@ -32,6 +32,26 @@ The skill, from a checkout:
 ./install-pve-skill
 ```
 
+The installer detects each agent CLI by its binary on PATH or its config
+directory and copies the skill into the directory that CLI reads:
+
+| CLI | Detected by | Skill directory |
+| --- | --- | --- |
+| Claude Code | `claude`, `~/.claude` | `~/.claude/skills` |
+| Codex | `codex`, `~/.codex` | `~/.agents/skills` |
+| OpenCode | `opencode`, `~/.config/opencode` | `~/.agents/skills` |
+| Gemini CLI | `gemini`, `~/.gemini` | `~/.agents/skills` |
+| Cursor | `agent`, `~/.cursor` | `~/.agents/skills` |
+| GitHub Copilot CLI | `copilot`, `~/.copilot` | `~/.agents/skills` |
+| Amp | `amp`, `~/.config/amp` | `~/.agents/skills` |
+| Goose | `goose`, `~/.config/goose` | `~/.agents/skills` |
+| Factory Droid | `droid`, `~/.factory` | `~/.agents/skills` |
+
+`~/.agents/skills` is read by every CLI in the table except Claude Code, so
+one copy there serves all of them. `PVE_SKILL_TARGETS=claude,codex,/some/skills`
+picks targets by name or skills directory; `PVE_SKILL_LIST=1` prints the
+targets and exits.
+
 ## Credentials
 
 Environment variables, or a `pve.env` file:
