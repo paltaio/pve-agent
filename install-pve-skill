@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
 # Installs the pve-agent skill into ~/.claude/skills, ~/.codex/skills and ~/.opencode/skills.
-# Usage: PVE_HOST=... PVE_TOKEN_ID=... PVE_TOKEN_SECRET=... ./install-pve-skill
+#
+# Usage, with the credentials in a pve.env file:
+#   set -a; . ./pve.env; set +a
+#   ./install-pve-skill
+#
+# Run from a checkout it installs that checkout; run from anywhere else it
+# clones the repository. Missing credentials are asked for on the terminal;
+# without one, PVE_HOST and a credential pair are required in the environment.
 set -euo pipefail
 
 repo_url="https://github.com/paltaio/pve-agent.git"
 repo_ref="${PVE_SKILL_REF:-main}"
 skill_name="pve-agent"
 work_dir=""
+staging=""
+previous=""
+target=""
 
 for tool in bun git; do
 	if ! command -v "$tool" >/dev/null 2>&1; then
@@ -16,6 +26,12 @@ for tool in bun git; do
 done
 
 cleanup() {
+	if [[ -n "$staging" ]]; then
+		rm -rf "$staging"
+	fi
+	if [[ -n "$previous" && -d "$previous" && ! -e "$target" ]]; then
+		mv "$previous" "$target"
+	fi
 	if [[ -n "$work_dir" ]]; then
 		rm -rf "$work_dir"
 	fi
@@ -33,8 +49,11 @@ if [[ ${#targets[@]} -eq 0 ]]; then
 	exit 1
 fi
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 if [[ -n "${PVE_SKILL_SOURCE_DIR:-}" ]]; then
 	repo_dir="$(cd "$PVE_SKILL_SOURCE_DIR" && pwd -P)"
+elif [[ -f "$script_dir/SKILL.md" && -d "$script_dir/src" ]]; then
+	repo_dir="$script_dir"
 else
 	work_dir="$(mktemp -d)"
 	repo_dir="$work_dir/repo"
@@ -60,16 +79,22 @@ for target in "${targets[@]}"; do
 		need_env=1
 	fi
 done
+target=""
+
+tty_in=""
+if { : </dev/tty; } 2>/dev/null; then
+	tty_in=/dev/tty
+fi
 
 ask() {
 	local name="$1" prompt="$2" secret="${3:-}"
 	local value="${!name:-}"
-	if [[ -z "$value" && -t 0 ]]; then
+	if [[ -z "$value" && -n "$tty_in" ]]; then
 		if [[ -n "$secret" ]]; then
-			read -r -s -p "$prompt: " value
-			echo >&2
+			read -r -s -p "$prompt: " value <"$tty_in" 2>"$tty_in"
+			echo >"$tty_in"
 		else
-			read -r -p "$prompt: " value
+			read -r -p "$prompt: " value <"$tty_in" 2>"$tty_in"
 		fi
 	fi
 	printf '%s' "$value"
@@ -83,7 +108,7 @@ env_body=""
 if [[ "$need_env" -eq 1 ]]; then
 	pve_host="$(ask PVE_HOST "PVE host")"
 	if [[ -z "$pve_host" ]]; then
-		echo "PVE_HOST is required" >&2
+		echo "PVE_HOST is required; without a terminal, set it in the environment" >&2
 		exit 2
 	fi
 	pve_port="$(ask PVE_PORT "PVE port (blank for 8006)")"
@@ -116,6 +141,8 @@ if [[ "$need_env" -eq 1 ]]; then
 	)"
 fi
 
+skill_text="$(<"$repo_dir/SKILL.md")"
+
 first_modules=""
 for target in "${targets[@]}"; do
 	staging="$target.tmp.$$"
@@ -124,13 +151,12 @@ for target in "${targets[@]}"; do
 	cp "$repo_dir/package.json" "$repo_dir/bun.lock" "$repo_dir/LICENSE" "$repo_dir/README.md" "$staging/"
 	cp -R "$repo_dir/src" "$staging/src"
 	cp -R "$repo_dir/schema" "$staging/schema"
-	sed "s|<skill-dir>|$target|g" "$repo_dir/SKILL.md" > "$staging/SKILL.md"
+	printf '%s\n' "${skill_text//<skill-dir>/$target}" > "$staging/SKILL.md"
 
 	if [[ -n "$first_modules" ]]; then
 		cp -R "$first_modules" "$staging/node_modules"
 	else
 		(cd "$staging" && bun install --production --frozen-lockfile >/dev/null)
-		first_modules="$target/node_modules"
 	fi
 
 	if [[ -f "$target/pve.env" && "${PVE_SKILL_OVERWRITE_ENV:-0}" != "1" ]]; then
@@ -140,9 +166,21 @@ for target in "${targets[@]}"; do
 	fi
 	chmod 600 "$staging/pve.env"
 
-	rm -rf "$target"
+	previous=""
+	if [[ -e "$target" ]]; then
+		previous="$target.old.$$"
+		rm -rf "$previous"
+		mv "$target" "$previous"
+	fi
 	mv "$staging" "$target"
+	staging=""
+	if [[ -n "$previous" ]]; then
+		rm -rf "$previous"
+		previous=""
+	fi
+	first_modules="$target/node_modules"
 done
+target=""
 
 echo "pve-agent skill installed in:"
 for target in "${targets[@]}"; do
