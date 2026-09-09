@@ -20,17 +20,12 @@ The skill, for every agent CLI found on this machine:
 curl -fsSL https://raw.githubusercontent.com/paltaio/pve-agent/main/install-pve-skill | bash
 ```
 
-Or from a clone:
-
-```sh
-git clone https://github.com/paltaio/pve-agent.git && cd pve-agent && ./install-pve-skill
-```
-
-The installer asks for the PVE host and a credential pair on the terminal and
-writes them to `pve.env` in the skill directory, mode 600. When `PVE_HOST` and
-`PVE_TOKEN_ID` with `PVE_TOKEN_SECRET`, or `PVE_USER` with `PVE_PASSWORD`, are
-set in the environment it asks nothing, which suits unattended installs;
-`PVE_PORT`, `PVE_NODE` and `PVE_VERIFY_SSL` are read the same way.
+The installer detects Claude Code, Codex, OpenCode, Gemini CLI, Cursor,
+Copilot CLI, Amp, Goose and Droid and installs into `~/.claude/skills` or the
+shared `~/.agents/skills`; `PVE_SKILL_TARGETS` overrides the targets and
+`PVE_SKILL_LIST=1` shows what would be used. It asks for the PVE host and a
+credential pair and writes them to `pve.env` in the skill directory; with
+`PVE_HOST` and a pair set in the environment it asks nothing.
 
 The library, as a dependency:
 
@@ -38,29 +33,7 @@ The library, as a dependency:
 bun add github:paltaio/pve-agent
 ```
 
-The installer detects each agent CLI by its binary on PATH or its config
-directory and copies the skill into the directory that CLI reads:
-
-| CLI | Detected by | Skill directory |
-| --- | --- | --- |
-| Claude Code | `claude`, `~/.claude` | `~/.claude/skills` |
-| Codex | `codex`, `~/.codex` | `~/.agents/skills` |
-| OpenCode | `opencode`, `~/.config/opencode` | `~/.agents/skills` |
-| Gemini CLI | `gemini`, `~/.gemini` | `~/.agents/skills` |
-| Cursor | `agent`, `~/.cursor` | `~/.agents/skills` |
-| GitHub Copilot CLI | `copilot`, `~/.copilot` | `~/.agents/skills` |
-| Amp | `amp`, `~/.config/amp` | `~/.agents/skills` |
-| Goose | `goose`, `~/.config/goose` | `~/.agents/skills` |
-| Factory Droid | `droid`, `~/.factory` | `~/.agents/skills` |
-
-`~/.agents/skills` is read by every CLI in the table except Claude Code, so
-one copy there serves all of them. `PVE_SKILL_TARGETS=claude,codex,/some/skills`
-picks targets by name or skills directory; `PVE_SKILL_LIST=1` prints the
-targets and exits.
-
-## Credentials
-
-Environment variables, or a `pve.env` file:
+Credentials come from the environment or a `pve.env` file:
 
 ```sh
 PVE_HOST=192.0.2.10
@@ -71,9 +44,6 @@ PVE_TOKEN_SECRET=...
 PVE_USER=root@pam
 PVE_PASSWORD=...
 ```
-
-[docs/getting-started.md](docs/getting-started.md) has the resolution order
-and the TLS note.
 
 ## First script
 
@@ -113,9 +83,6 @@ PVE_ENV_FILE=./pve.env bun run script.ts
 - [ARCHITECTURE.md](ARCHITECTURE.md): the internal contract
 - [SKILL.md](SKILL.md): the skill manifest
 
-Runnable scripts live in [examples/](examples/); each header names the
-variables it reads.
-
 ## Development
 
 ```sh
@@ -125,9 +92,6 @@ set -a; . ./pve.env; set +a; PVE_LIVE=1 PVE_ENV_FILE=./pve.env bun test test/liv
 bun run typecheck
 bun run format
 ```
-
-`bun run schema root@<node>` dumps the schema from a node and `bun run
-generate` rewrites `src/generated` from it.
 
 ## Scope
 
