@@ -186,15 +186,33 @@ export class PveTaskError extends PveError {
 		detail?: string
 		log?: readonly string[]
 	}) {
-		const tail = args.log && args.log.length > 0 ? `\nTask log tail:\n${args.log.join('\n')}` : ''
+		const log = args.log ?? []
+		const tail = log.length > 0 ? `\nTask log tail:\n${log.join('\n')}` : ''
 		const what = args.detail ?? args.exitStatus ?? 'no exit status'
 		const verb = args.timedOut === true ? 'is' : 'finished with:'
-		super('task', `Task ${args.upid} ${verb} ${what}${tail}`)
+		const cause = firstErrorLine(log, args.exitStatus)
+		super('task', `Task ${args.upid} ${verb} ${what}${cause ? ` (${cause})` : ''}${tail}`)
 		this.upid = args.upid
 		this.exitStatus = args.exitStatus
 		this.timedOut = args.timedOut === true
 		this.log = args.log ?? []
 	}
+}
+
+/**
+ * The first `ERROR:` line of a task log, without its timestamp, when it
+ * says more than the exit status does. A migration ends with "migration
+ * aborted" while the line that names the missing bridge sits higher up.
+ */
+function firstErrorLine(log: readonly string[], exitStatus: string | null): string | undefined {
+	for (const line of log) {
+		const match = /(?:^|\s)ERROR:\s*(.+)$/.exec(line)
+		if (!match) continue
+		const text = match[1]?.trim()
+		if (!text || (exitStatus !== null && exitStatus.includes(text))) continue
+		return text
+	}
+	return undefined
 }
 
 /** A condition the caller waited for did not hold before the deadline. */

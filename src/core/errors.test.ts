@@ -198,6 +198,37 @@ describe('PveTaskError', () => {
 		)
 	})
 
+	test('lifts the first ERROR line of the log next to a bare exit status', () => {
+		const error = new PveTaskError({
+			upid: 'UPID:x',
+			exitStatus: 'migration aborted',
+			log: [
+				'2026-09-09 13:34:20 starting migration of VM 112',
+				"2026-09-09 13:34:23 [pve2] bridge 'vmbr1' does not exist",
+				'2026-09-09 13:34:23 ERROR: online migrate failure - remote command failed with exit code 255',
+				'2026-09-09 13:34:23 ERROR: migration aborted (duration 00:00:03)',
+				'TASK ERROR: migration aborted',
+			],
+		})
+		expect(error.message.split('\n')[0]).toBe(
+			'Task UPID:x finished with: migration aborted (online migrate failure - remote command failed with exit code 255)',
+		)
+	})
+
+	test('skips an ERROR line that only repeats the exit status', () => {
+		const error = new PveTaskError({
+			upid: 'UPID:x',
+			exitStatus: "can't lock file '/var/lock/qemu-server/lock-112.conf' - got timeout",
+			log: [
+				'trying to acquire lock...',
+				"TASK ERROR: can't lock file '/var/lock/qemu-server/lock-112.conf' - got timeout",
+			],
+		})
+		expect(error.message.split('\n')[0]).toBe(
+			"Task UPID:x finished with: can't lock file '/var/lock/qemu-server/lock-112.conf' - got timeout",
+		)
+	})
+
 	test('describes a task that outlived the wait', () => {
 		const error = new PveTaskError({
 			upid: 'UPID:x',
