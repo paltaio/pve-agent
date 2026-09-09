@@ -9,7 +9,7 @@
  */
 
 import type { PveClient } from '../core/client.ts'
-import { PveError } from '../core/errors.ts'
+import { PveApiError } from '../core/errors.ts'
 import { normalizeTaskListEntry, type TaskListEntry } from '../core/tasks.ts'
 import {
 	parseTagList,
@@ -151,7 +151,12 @@ export async function nextVmid(client: PveClient, vmid?: number): Promise<number
 	)
 	const parsed = toOptionalNumber(answer)
 	if (parsed === undefined) {
-		throw new PveError('api', `/cluster/nextid answered '${String(answer)}', which is not a vmid`)
+		throw new PveApiError({
+			status: 200,
+			method: 'GET',
+			path: '/cluster/nextid',
+			detail: `the answer '${String(answer)}' is not a vmid`,
+		})
 	}
 	return parsed
 }

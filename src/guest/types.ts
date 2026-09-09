@@ -7,7 +7,7 @@
  * object and keeps the untouched response under `raw`.
  */
 
-import { PveError } from '../core/errors.ts'
+import { PveApiError } from '../core/errors.ts'
 import {
 	splitIndexedKey,
 	type FormatOptions,
@@ -275,7 +275,12 @@ export function normalizeSummary(raw: RawSummary, type: GuestType, node: string)
 	const vmid = toOptionalNumber(raw.vmid)
 	// Falling back to 0 would build paths such as /nodes/ms01/qemu/0 and send them.
 	if (vmid === undefined) {
-		throw new PveError('api', `A ${type} index row on ${node} carries no usable vmid`)
+		throw new PveApiError({
+			status: 200,
+			method: 'GET',
+			path: `/nodes/${node}/${type}`,
+			detail: 'an index row carries no usable vmid',
+		})
 	}
 	return {
 		type: raw.type === 'qemu' || raw.type === 'lxc' ? raw.type : type,

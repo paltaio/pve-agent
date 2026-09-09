@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { PveError } from '../core/errors.ts'
+import { PveApiError } from '../core/errors.ts'
 import { closeMockClients, formObject, mockClient } from '../core/test-support/api-mock.ts'
 import { ClusterApi, nextVmid } from './cluster.ts'
 
@@ -73,7 +73,7 @@ describe('nextid', () => {
 	test('rejects an answer that is not a number', async () => {
 		const mock = mockClient()
 		mock.reply({ data: 'nope' })
-		await expect(nextVmid(mock.client)).rejects.toBeInstanceOf(PveError)
+		await expect(nextVmid(mock.client)).rejects.toBeInstanceOf(PveApiError)
 	})
 })
 
