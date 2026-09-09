@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { encodeParams, PveClient, unwrapEnvelope, type RequestTrace } from './client.ts'
 import {
 	PveApiError,
@@ -46,12 +49,6 @@ describe('request shaping', () => {
 		expect(sent.path).toBe('/nodes/ms01/qemu/9029?purge=1&destroy-unreferenced-disks=0')
 		expect(sent.body).toBe('')
 		expect(sent.headers['content-type']).toBeUndefined()
-	})
-
-	test('a DELETE with no parameters sends no query', async () => {
-		const mock = mockClient()
-		await mock.client.delete('/nodes/ms01/qemu/9029')
-		expect(mock.last().path).toBe('/nodes/ms01/qemu/9029')
 	})
 
 	test('a GET puts its parameters in the query string', async () => {
@@ -149,6 +146,27 @@ describe('credentials on the wire', () => {
 		const write = mock.requests[2]
 		expect(write?.headers['cookie']).toBe('PVEAuthCookie=PVE%3Aagents%40pve%3ATICKET')
 		expect(write?.headers['csrfpreventiontoken']).toBe('CSRF')
+	})
+
+	test('a DELETE on a ticket carries the CSRF token, as every non-GET ticket call must', async () => {
+		const mock = mockClient({ token: false })
+		await mock.client.delete('/nodes/ms01/qemu/9029', { purge: true })
+		const sent = mock.last()
+		expect(sent.method).toBe('DELETE')
+		expect(sent.headers['cookie']).toBe('PVEAuthCookie=PVE%3Aroot%40pam%3ATICKET')
+		expect(sent.headers['csrfpreventiontoken']).toBe('CSRF')
+	})
+
+	test('a request trace carries no credential', async () => {
+		const traces: RequestTrace[] = []
+		const mock = mockClient({ onRequest: (trace) => traces.push(trace) })
+		await mock.client.get('/version')
+		await mock.client.post('/nodes/ms01/termproxy', {}, { tier: 'ticket' })
+		expect(traces).toHaveLength(2)
+		const serialized = JSON.stringify(traces)
+		for (const secret of ['secret', 'password', 'TICKET', 'CSRF', 'Authorization', 'Cookie']) {
+			expect(serialized).not.toContain(secret)
+		}
 	})
 
 	test('one 401 on a ticket call forces a fresh login and a single retry', async () => {
@@ -463,23 +481,28 @@ describe('signRequest', () => {
 
 describe('construction', () => {
 	test('fromEnv reads the credential file and passes client options through', async () => {
-		const path = `${process.env['TMPDIR'] ?? '/tmp'}/pve-agent-client-${process.pid}.env`
-		await Bun.write(
-			path,
-			'PVE_HOST=node.test\nPVE_NODE=ms01\nPVE_TOKEN_ID=agents@pve!ci\nPVE_TOKEN_SECRET=s\nPVE_VERIFY_SSL=0\n',
-		)
-		const traces: RequestTrace[] = []
-		const client = PveClient.fromEnv({
-			envFile: path,
-			timeoutMs: 1234,
-			onRequest: (trace) => traces.push(trace),
-		})
-		expect(client.baseUrl).toBe('https://node.test:8006')
-		expect(client.defaultNode).toBe('ms01')
-		expect(client.http.timeoutMs).toBe(1234)
-		expect(client.http.verifySsl).toBe(false)
-		expect(client.auth.tiers).toEqual(['token'])
-		client.close()
+		const dir = mkdtempSync(join(tmpdir(), 'pve-agent-client-'))
+		try {
+			const path = join(dir, 'pve.env')
+			await Bun.write(
+				path,
+				'PVE_HOST=node.test\nPVE_NODE=ms01\nPVE_TOKEN_ID=agents@pve!ci\nPVE_TOKEN_SECRET=s\nPVE_VERIFY_SSL=0\n',
+			)
+			const traces: RequestTrace[] = []
+			const client = PveClient.fromEnv({
+				envFile: path,
+				timeoutMs: 1234,
+				onRequest: (trace) => traces.push(trace),
+			})
+			expect(client.baseUrl).toBe('https://node.test:8006')
+			expect(client.defaultNode).toBe('ms01')
+			expect(client.http.timeoutMs).toBe(1234)
+			expect(client.http.verifySsl).toBe(false)
+			expect(client.auth.tiers).toEqual(['token'])
+			client.close()
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
 	})
 
 	test('refuses to build without any credential', () => {

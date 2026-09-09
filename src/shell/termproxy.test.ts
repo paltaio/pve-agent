@@ -176,6 +176,39 @@ describe('run', () => {
 		await transport.close()
 	})
 
+	test('a chunk holding two results yields the first, and the next run starts clean', async () => {
+		const result = (marker: string, out: string, code: number): string =>
+			`\u0001${marker}BEGIN\u0002${out}\u0001${marker}ERR\u0002\u0001${marker}END:${code}\u0002`
+		const { transport } = await openWith({
+			rawReply: (command, marker) =>
+				command === 'first'
+					? `${result(marker, 'one\r\n', 0)}${result(marker, 'two\r\n', 3)}`
+					: result(marker, 'three\r\n', 5),
+		})
+		expect(await transport.run('first')).toMatchObject({ stdout: 'one\n', exitCode: 0 })
+		expect(await transport.run('second')).toMatchObject({ stdout: 'three\n', exitCode: 5 })
+		await transport.close()
+	})
+
+	test('an exit status that is not a number is reported as -1', async () => {
+		const { transport } = await openWith({
+			rawReply: (_command, marker) =>
+				`\u0001${marker}BEGIN\u0002\u0001${marker}ERR\u0002\u0001${marker}END:abc\u0002`,
+		})
+		expect((await transport.run('true')).exitCode).toBe(-1)
+		await transport.close()
+	})
+
+	test('marker bytes inside the output do not end the result early', async () => {
+		const { transport } = await openWith({
+			reply: () => ({ stdout: 'a\u0001b\u0002c\u0001XBEGIN\u0002d\r\n', stderr: 'e\u0002f' }),
+		})
+		const result = await transport.run('cat weird')
+		expect(result.stdout).toBe('a\u0001b\u0002c\u0001XBEGIN\u0002d\n')
+		expect(result.stderr).toBe('e\u0002f')
+		await transport.close()
+	})
+
 	test('a multi-byte character split across frames is not corrupted', async () => {
 		const { transport } = await openWith({
 			reply: () => ({ stdout: 'a\u00f1o\r\n' }),
