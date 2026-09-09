@@ -101,7 +101,7 @@ describe('qm command lines', () => {
 
 	test('the lifecycle verbs carry their qm timeouts in seconds', async () => {
 		const transport = new FakeTransport()
-		const qm = new NodeShell(transport, { destructive: 'allow' }).qm
+		const qm = new NodeShell(transport).qm
 		await qm.start(101, { timeoutMs: 9 })
 		await qm.stop(101, { timeoutSeconds: 30, overruleShutdown: true })
 		await qm.shutdown(101, { timeoutSeconds: 60, forceStop: true })
@@ -170,7 +170,7 @@ describe('qm command lines', () => {
 
 	test('showCommand, rescan, nbdStop, enrollEfiKeys and cleanup', async () => {
 		const transport = new FakeTransport({ reply: () => ({ stdout: '/usr/bin/kvm -id 100\n' }) })
-		const qm = new NodeShell(transport, { destructive: 'allow' }).qm
+		const qm = new NodeShell(transport).qm
 		expect(await qm.showCommand(100, { pretty: true, snapshot: 's1' })).toBe('/usr/bin/kvm -id 100')
 		await qm.rescan({ vmid: 100, dryRun: true })
 		await qm.rescan()

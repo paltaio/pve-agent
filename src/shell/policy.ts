@@ -46,7 +46,12 @@ export const DESTRUCTIVE_PATTERNS: readonly DestructivePattern[] = [
 	{ pattern: /\bpvecm\s+delnode\b/, reason: 'cluster node removal' },
 	{ pattern: /\bapt(-get)?\b[^|;&]*\b(remove|purge|autoremove)\b/, reason: 'package removal' },
 	{ pattern: /\bdpkg\b[^|;&]*(--purge|-P)\b/, reason: 'package purge' },
-	{ pattern: /\b(reboot|poweroff|halt|shutdown)\b/, reason: 'node power state change' },
+	{
+		// Command position only: reboot, shutdown and halt are also qm and pct
+		// subcommands.
+		pattern: /(?:^|[;&|(`\n]|\bsudo\s+)\s*(?:\S*\/)?(reboot|poweroff|halt|shutdown)\b/,
+		reason: 'node power state change',
+	},
 	{
 		pattern: /\bsystemctl\s+(reboot|poweroff|halt|kexec|emergency|rescue)\b/,
 		reason: 'node power state change',

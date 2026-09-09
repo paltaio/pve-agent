@@ -39,6 +39,44 @@ describe('the default policy', () => {
 		}
 	})
 
+	test('host power words only count at the command position', () => {
+		for (const command of [
+			'qm shutdown 101',
+			'qm shutdown 101 --timeout 60 --forceStop 1',
+			'qm reboot 101 --timeout 45',
+			'pct reboot 9002',
+			'pct shutdown 9060 --timeout 30',
+			'qm cleanup --clean-shutdown 1',
+			'qm guest cmd 101 shutdown',
+			'systemctl restart pvestatd',
+			'journalctl -u systemd-halt.service',
+		]) {
+			expect(policy.explain(command).allowed).toBe(true)
+		}
+		for (const command of [
+			'reboot',
+			'shutdown -h now',
+			'poweroff',
+			'halt',
+			'/sbin/reboot',
+			'sudo halt',
+			'true; poweroff',
+			'echo ok && reboot',
+			'echo ok || reboot',
+			'echo ok | shutdown -r now',
+			'echo $(reboot)',
+			'echo `halt`',
+		]) {
+			expect(policy.explain(command).allowed).toBe(false)
+		}
+	})
+
+	test('a command nested in pct exec or qm guest exec is read as its own', () => {
+		expect(policy.explain('pct exec 9002 -- rm -rf /tmp/x').allowed).toBe(false)
+		expect(policy.explain('qm guest exec 101 -- mkfs.ext4 /dev/vdb').allowed).toBe(false)
+		expect(policy.explain('pct exec 9002 -- rm /tmp/x').allowed).toBe(true)
+	})
+
 	test('check throws a policy error naming the reason', () => {
 		const error = (() => {
 			try {

@@ -122,7 +122,7 @@ describe('reads', () => {
 describe('lifecycle and maintenance', () => {
 	test('each verb builds its pct line', async () => {
 		const transport = new FakeTransport()
-		const pct = new NodeShell(transport, { destructive: 'allow' }).pct
+		const pct = new NodeShell(transport).pct
 		await pct.start(9060)
 		await pct.stop(9060, { overruleShutdown: true })
 		await pct.shutdown(9060, { timeoutSeconds: 30, forceStop: true })
