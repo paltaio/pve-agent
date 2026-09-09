@@ -92,7 +92,7 @@ describe.skipIf(!LIVE || !has.scratchNode)(`node ${SCRATCH_NODE}`, () => {
 	test(
 		'a task page and the status of its first task',
 		async () => {
-			const page = await node().api.tasks.page({ limit: 5 })
+			const page = await node().api.tasks.list({ limit: 5 })
 			expect(page.tasks.length).toBeGreaterThan(0)
 			expect(page.tasks.length).toBeLessThanOrEqual(5)
 			const [first] = page.tasks
