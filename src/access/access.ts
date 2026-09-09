@@ -21,6 +21,7 @@ import { PveClient, type RequestTrace } from '../core/client.ts'
 import {
 	isRecord,
 	stringList,
+	toBoolean,
 	toOptionalBoolean,
 	toOptionalNumber,
 	toOptionalString,
@@ -630,7 +631,7 @@ export class AccessApi {
 	 * when a lock was cleared.
 	 */
 	async unlockTfa(userid: string): Promise<boolean> {
-		return this.client.put<boolean>(userPath(userid, '/unlock-tfa'))
+		return toBoolean(await this.client.put<unknown>(userPath(userid, '/unlock-tfa')))
 	}
 
 	/**

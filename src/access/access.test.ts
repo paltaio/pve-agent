@@ -341,7 +341,7 @@ describe('tfa', () => {
 		])
 		expect(formObject(mock.last())).toEqual({ enable: '0', password: 'own' })
 
-		mock.reply({ data: true })
+		mock.reply({ data: 1 })
 		expect(await access.unlockTfa('alice@pve')).toBe(true)
 		expect(mock.last().path).toBe('/access/users/alice%40pve/unlock-tfa')
 	})
