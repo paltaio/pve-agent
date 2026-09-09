@@ -7,10 +7,10 @@
  */
 
 import type { PveClient } from '../core/client.ts'
-import { PveShellCredentialError } from './errors.ts'
+import { PveShellCredentialError, PveShellPolicyError } from './errors.ts'
 import { PctShell } from './lxc.ts'
 import { AptShell } from './packages.ts'
-import { CommandPolicy } from './policy.ts'
+import { CommandPolicy, commandPrograms } from './policy.ts'
 import { QmShell } from './qemu.ts'
 import { probeSsh, SshTransport, type SshOptions } from './ssh.ts'
 import { SystemdShell } from './systemd.ts'
@@ -72,11 +72,23 @@ export class NodeShell {
 
 	/**
 	 * Run a command line as root on the node. The policy sees the command
-	 * first and can refuse it. Returns the exit code rather than throwing,
-	 * unless `check` is set.
+	 * first and can refuse it; when the command runs an interpreter, the
+	 * policy reads `input` as command lines too. Returns the exit code rather
+	 * than throwing, unless `check` is set.
 	 */
 	async run(command: string, options: RunOptions = {}): Promise<CommandResult> {
 		this.policy.check(command)
+		if (options.input !== undefined && commandPrograms(command).some(isInterpreter)) {
+			const input =
+				typeof options.input === 'string' ? options.input : new TextDecoder().decode(options.input)
+			const decision = this.policy.explain(input)
+			if (!decision.allowed) {
+				throw new PveShellPolicyError({
+					command,
+					reason: `the input feeds an interpreter and ${decision.reason}`,
+				})
+			}
+		}
 		return this.transport.run(command, options)
 	}
 
@@ -150,6 +162,12 @@ export async function selectTransport(options: NodeShellOptions): Promise<ShellT
 			'Authorise an SSH key for root on the node, or set PVE_USER=root@pam and PVE_PASSWORD.',
 		].join(' '),
 	)
+}
+
+const INTERPRETER = /^(sh|bash|dash|zsh|ksh|eval|xargs|python[0-9.]*|perl|ruby)$/
+
+function isInterpreter(program: string): boolean {
+	return INTERPRETER.test(program)
 }
 
 function requireClient(options: NodeShellOptions): PveClient {

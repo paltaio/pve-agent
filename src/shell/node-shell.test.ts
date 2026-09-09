@@ -29,6 +29,23 @@ describe('the policy in front of the transport', () => {
 		expect(transport.commands).toEqual([])
 	})
 
+	test('input that feeds an interpreter goes through the policy too', async () => {
+		const transport = new FakeTransport()
+		const shell = new NodeShell(transport)
+		for (const command of ['sh', 'bash -s', '/bin/dash', 'xargs rm', 'python3 -', 'perl']) {
+			await expect(shell.run(command, { input: 'rm -rf /\n' })).rejects.toBeInstanceOf(
+				PveShellPolicyError,
+			)
+		}
+		await expect(
+			shell.run('sh', { input: new TextEncoder().encode('echo ok\nreboot\n') }),
+		).rejects.toBeInstanceOf(PveShellPolicyError)
+		expect(transport.commands).toEqual([])
+		await shell.run('sh', { input: 'echo ok\nrm /tmp/x\n' })
+		await shell.run('cat > /tmp/notes', { input: 'rm -rf /\n' })
+		expect(transport.commands).toEqual(['sh', 'cat > /tmp/notes'])
+	})
+
 	test('the policy options are applied', async () => {
 		const transport = new FakeTransport()
 		const shell = new NodeShell(transport, { allow: ['zpool'], destructive: 'allow' })
