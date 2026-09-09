@@ -590,6 +590,7 @@ export type {
 export {
 	PveShellCommandError,
 	PveShellCredentialError,
+	PveShellOutputError,
 	PveShellPolicyError,
 	PveShellTimeoutError,
 	PveShellTransportError,

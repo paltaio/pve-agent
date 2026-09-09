@@ -7,6 +7,8 @@
  * are here as well, for a caller that already holds a shell.
  */
 
+import { isRecord } from '../core/values.ts'
+import { PveShellOutputError } from './errors.ts'
 import { assertSafeInteger, shJoin } from './escape.ts'
 import type { NodeShell } from './node-shell.ts'
 import type { CommandResult, RunOptions } from './types.ts'
@@ -291,11 +293,16 @@ export function parseMonitorOutput(stdout: string): string {
 
 /** Parse the JSON `qm guest exec` prints once the program has exited. */
 export function parseGuestExec(stdout: string): QmGuestExecResult {
-	const parsed: unknown = JSON.parse(stdout)
-	if (typeof parsed !== 'object' || parsed === null) {
-		throw new TypeError(`qm guest exec printed something other than a JSON object: ${stdout}`)
+	let parsed: unknown
+	try {
+		parsed = JSON.parse(stdout)
+	} catch (cause) {
+		throw new PveShellOutputError({ what: 'qm guest exec printed no JSON', output: stdout, cause })
 	}
-	const record: Record<string, unknown> = { ...parsed }
+	if (!isRecord(parsed)) {
+		throw new PveShellOutputError({ what: 'qm guest exec printed no JSON object', output: stdout })
+	}
+	const record = parsed
 	const exitCode = record['exitcode']
 	return {
 		exitCode: typeof exitCode === 'number' ? exitCode : undefined,

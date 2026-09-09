@@ -66,6 +66,18 @@ export class PveShellCommandError extends PveShellError {
 	}
 }
 
+/** A command ran but printed something the helper cannot read. */
+export class PveShellOutputError extends PveShellError {
+	readonly output: string
+
+	constructor(args: { what: string; output: string; cause?: unknown }) {
+		super('output', `${args.what}: ${args.output.trim().slice(0, 500) || 'no output'}`, {
+			cause: args.cause,
+		})
+		this.output = args.output
+	}
+}
+
 /** A command produced no result before its deadline. */
 export class PveShellTimeoutError extends PveShellError {
 	readonly node: string

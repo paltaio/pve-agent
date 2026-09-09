@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { PveShellPolicyError } from './errors.ts'
+import { PveShellOutputError, PveShellPolicyError } from './errors.ts'
 import { NodeShell } from './node-shell.ts'
 import { parseGuestConfig, parseGuestExec, parseMonitorOutput, parseQmList } from './qemu.ts'
 import { FakeTransport } from './test-support.ts'
@@ -71,8 +71,21 @@ describe('parseGuestExec', () => {
 		})
 	})
 
-	test('something other than an object is an error', () => {
-		expect(() => parseGuestExec('42')).toThrow(TypeError)
+	test('something other than a JSON object is a shell output error', () => {
+		expect(() => parseGuestExec('42')).toThrow(PveShellOutputError)
+		expect(() => parseGuestExec('QEMU guest agent is not running')).toThrow(PveShellOutputError)
+		const error = (() => {
+			try {
+				parseGuestExec('not json')
+			} catch (caught) {
+				return caught
+			}
+			return undefined
+		})()
+		if (error instanceof PveShellOutputError) {
+			expect(error.shell).toBe('output')
+			expect(error.output).toBe('not json')
+		}
 	})
 })
 

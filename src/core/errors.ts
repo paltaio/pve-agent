@@ -282,6 +282,8 @@ export type ShellErrorKind =
 	| 'policy'
 	/** The command ran and exited non-zero. */
 	| 'command'
+	/** The command ran but printed something the helper cannot read. */
+	| 'output'
 	/** The command produced no result before its deadline. */
 	| 'timeout'
 
